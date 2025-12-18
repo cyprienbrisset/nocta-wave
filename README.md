@@ -14,7 +14,7 @@
   <a href="#fonctionnalités">Fonctionnalités</a> •
   <a href="#technologies">Technologies</a> •
   <a href="#installation">Installation</a> •
-  <a href="#utilisation">Utilisation</a> •
+  <a href="#déploiement">Déploiement</a> •
   <a href="#architecture">Architecture</a> •
   <a href="#contribution">Contribution</a>
 </p>
@@ -24,6 +24,7 @@
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License" />
   <img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg" alt="Node" />
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome" />
+  <img src="https://img.shields.io/badge/coolify-ready-purple.svg" alt="Coolify Ready" />
 </p>
 
 ---
@@ -111,6 +112,7 @@ Construite avec une architecture monorepo moderne, WS-Flows offre une solution c
 | **pnpm** | Package manager |
 | **Turborepo** | Build system monorepo |
 | **Docker** | Conteneurisation |
+| **Coolify** | Déploiement PaaS |
 | **TypeScript** | Typage statique |
 
 ## Installation
@@ -122,7 +124,7 @@ Construite avec une architecture monorepo moderne, WS-Flows offre une solution c
 - **Docker** & Docker Compose
 - **Git**
 
-### Quick Start
+### Quick Start (Développement)
 
 ```bash
 # 1. Cloner le repository
@@ -142,6 +144,7 @@ docker compose -f docker/docker-compose.yml up -d
 cd apps/api
 pnpm db:generate
 pnpm db:migrate
+pnpm db:seed  # Crée un admin par défaut
 
 # 6. Démarrer en mode développement (depuis la racine)
 cd ../..
@@ -157,7 +160,7 @@ Créez un fichier `.env` à la racine du projet :
 DATABASE_URL="postgresql://postgres:password@localhost:5434/wsflows"
 
 # Redis
-REDIS_URL="redis://:password@localhost:6380"
+REDIS_URL="redis://localhost:6380"
 
 # JWT
 JWT_SECRET="your-super-secret-key-min-32-chars"
@@ -175,12 +178,9 @@ CORS_ORIGIN="http://localhost:4000"
 # Frontend
 NEXT_PUBLIC_API_URL="http://localhost:4001/api"
 
-# Trigger.dev (optionnel)
-TRIGGER_API_URL="https://api.trigger.dev"
-TRIGGER_API_KEY="your-trigger-api-key"
+# Admin (pour le seed)
+ADMIN_PASSWORD="admin123"
 ```
-
-## Utilisation
 
 ### Accès aux applications
 
@@ -190,7 +190,79 @@ TRIGGER_API_KEY="your-trigger-api-key"
 | **API** | http://localhost:4001 | Backend REST API |
 | **API Docs** | http://localhost:4001/docs | Swagger Documentation |
 
-### Commandes pnpm
+### Credentials par défaut
+
+| | |
+|---|---|
+| **Email** | `admin@wsflows.local` |
+| **Password** | `admin123` (ou valeur de `ADMIN_PASSWORD`) |
+
+## Déploiement
+
+### Coolify (Recommandé)
+
+WS-Flows est prêt pour un déploiement en un clic sur Coolify.
+
+#### 1. Créer un projet dans Coolify
+
+- Nouveau projet → "WS-Flows"
+- Ajouter une ressource → "Docker Compose"
+
+#### 2. Configuration
+
+- **Source** : Votre repo Git
+- **Docker Compose Location** : `docker/docker-compose.coolify.yml`
+
+#### 3. Variables d'environnement
+
+```env
+# Sécurité (OBLIGATOIRE - générer des valeurs uniques)
+JWT_SECRET=<openssl rand -base64 64>
+REFRESH_TOKEN_SECRET=<openssl rand -base64 64>
+ENCRYPTION_KEY=<openssl rand -hex 32>
+POSTGRES_PASSWORD=<mot-de-passe-db-fort>
+
+# Admin
+ADMIN_PASSWORD=votre-mot-de-passe-admin
+
+# URLs (adapter à vos domaines)
+CORS_ORIGIN=https://wsflows.votre-domaine.com
+NEXT_PUBLIC_API_URL=https://api.wsflows.votre-domaine.com
+```
+
+#### 4. Domaines
+
+| Service | Domaine | Port |
+|---------|---------|------|
+| `web` | wsflows.votre-domaine.com | 3000 |
+| `api` | api.wsflows.votre-domaine.com | 3001 |
+
+#### 5. Déployer
+
+C'est tout ! L'application :
+- Applique les migrations automatiquement
+- Crée un utilisateur admin
+- Crée une équipe par défaut
+- Crée des tags et templates de démarrage
+
+### Docker Compose (Manuel)
+
+```bash
+# Production
+docker compose -f docker/docker-compose.prod.yml up -d
+
+# Voir les logs
+docker compose -f docker/docker-compose.prod.yml logs -f
+```
+
+### Déploiement manuel
+
+1. **Build** tous les packages : `pnpm build`
+2. **API** : Déployer `apps/api/dist` sur Node.js
+3. **Web** : Export statique ou serveur Node.js
+4. **Worker** : Trigger.dev CLI ou self-hosted
+
+## Commandes pnpm
 
 ```bash
 # Développement
@@ -267,8 +339,15 @@ ws-flows/
 │           ├── integrations/   # APIs tierces
 │           └── utility/        # Utilitaires
 │
-├── docs/                       # Documentation
 ├── docker/                     # Configuration Docker
+│   ├── docker-compose.yml      # Développement
+│   ├── docker-compose.coolify.yml  # Coolify
+│   ├── docker-compose.prod.yml # Production
+│   ├── Dockerfile.api
+│   ├── Dockerfile.web
+│   └── Dockerfile.worker
+│
+├── docs/                       # Documentation
 └── logo-nocta-wave.png         # Logo du projet
 ```
 
@@ -281,7 +360,7 @@ ws-flows/
 | **Transform** | Set, Map, Filter, Merge, Split, Aggregate, Sort, Code |
 | **Logic** | Condition, Switch, Loop, Wait, Stop |
 | **Database** | PostgreSQL, MySQL, MongoDB, Redis |
-| **Integrations** | Slack, Discord, GitHub, Gmail, Google Sheets, Notion, Airtable, Stripe, Twilio, SendGrid, AWS S3, OpenAI, RSS, Webflow |
+| **Integrations** | Slack, Discord, GitHub, Gmail, Google Sheets, Notion, Airtable, Stripe, Twilio, SendGrid, AWS S3, OpenAI, RSS |
 | **Utility** | Delay, Crypto, DateTime, HTML Parse, Log, Debug, JSON Parse, Error |
 
 ## Création de nodes personnalisés
@@ -324,30 +403,15 @@ Consultez [packages/nodes/README.md](packages/nodes/README.md) pour la documenta
 ```bash
 # Inscription
 POST /api/auth/register
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "password": "password123",
-  "name": "John Doe"
-}
+{ "email": "user@example.com", "password": "password123", "name": "John Doe" }
 
 # Connexion
 POST /api/auth/login
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "password": "password123"
-}
+{ "email": "user@example.com", "password": "password123" }
 
 # Refresh Token
 POST /api/auth/refresh
-Content-Type: application/json
-
-{
-  "refreshToken": "..."
-}
+{ "refreshToken": "..." }
 ```
 
 ### Workflows
@@ -359,53 +423,20 @@ Authorization: Bearer <token>
 
 # Créer un workflow
 POST /api/workflows
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "name": "Mon Workflow",
-  "description": "Description...",
-  "graph": { "nodes": [], "edges": [], "viewport": {} }
-}
+{ "name": "Mon Workflow", "description": "...", "graph": { "nodes": [], "edges": [] } }
 
 # Exécuter un workflow
 POST /api/executions
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "workflowId": "uuid",
-  "triggerType": "MANUAL"
-}
+{ "workflowId": "uuid", "triggerType": "MANUAL" }
 
 # Exporter un workflow
 GET /api/workflows/:id/export
-Authorization: Bearer <token>
 
 # Importer un workflow
 POST /api/workflows/import
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{ ... exported JSON ... }
 ```
 
-La documentation complète de l'API est disponible sur `http://localhost:4001/docs`.
-
-## Déploiement
-
-### Docker (Production)
-
-```bash
-docker compose -f docker/docker-compose.prod.yml up -d
-```
-
-### Déploiement manuel
-
-1. **Build** tous les packages : `pnpm build`
-2. **API** : Déployer `apps/api/dist` sur Node.js
-3. **Web** : Export statique ou serveur Node.js
-4. **Worker** : Trigger.dev CLI ou self-hosted
+La documentation complète de l'API est disponible sur `/docs`.
 
 ## Contribution
 
@@ -459,6 +490,7 @@ Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de 
 - [React Flow](https://reactflow.dev) - Éditeur de workflow visuel
 - [shadcn/ui](https://ui.shadcn.com) - Composants UI élégants
 - [Prisma](https://prisma.io) - ORM moderne pour TypeScript
+- [Coolify](https://coolify.io) - PaaS open-source pour le déploiement
 
 ---
 
