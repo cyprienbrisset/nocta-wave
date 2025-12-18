@@ -1,51 +1,65 @@
 #!/bin/sh
-set -e
 
 echo "=========================================="
 echo "WS-Flows API Starting..."
 echo "=========================================="
+echo "DATABASE_URL: ${DATABASE_URL:-not set}"
+echo "NODE_ENV: ${NODE_ENV:-not set}"
+echo "PORT: ${PORT:-3001}"
+echo ""
 
-# Wait for database to be ready using pg_isready-like approach
-echo "Waiting for database..."
+# Debug: try to resolve postgres hostname
+echo "Checking network connectivity..."
+echo "Resolving 'postgres' hostname:"
+getent hosts postgres 2>&1 || echo "Warning: Could not resolve 'postgres' hostname"
+echo ""
+
+# Wait for database using prisma migrate with timeout
+echo "Waiting for database to be ready..."
 max_attempts=30
 attempt=1
+db_ready=0
 
 while [ $attempt -le $max_attempts ]; do
-  if node -e "
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
-    prisma.\$connect()
-      .then(() => { prisma.\$disconnect(); process.exit(0); })
-      .catch(() => process.exit(1));
-  " 2>/dev/null; then
-    echo "Database is ready!"
+  echo ""
+  echo "=== Attempt $attempt/$max_attempts ==="
+
+  # Try to run prisma migrate deploy - it will fail if DB is not ready
+  if npx prisma migrate deploy 2>&1; then
+    db_ready=1
+    echo "Database is ready and migrations applied!"
     break
   fi
-  echo "Database not ready, waiting... (attempt $attempt/$max_attempts)"
-  sleep 2
+
+  echo "Database not ready yet, waiting 3 seconds..."
+  sleep 3
   attempt=$((attempt + 1))
 done
 
-if [ $attempt -gt $max_attempts ]; then
-  echo "ERROR: Database connection timeout after $max_attempts attempts"
+if [ $db_ready -eq 0 ]; then
+  echo ""
+  echo "ERROR: Could not connect to database after $max_attempts attempts"
+  echo "Please check:"
+  echo "  1. PostgreSQL container is running"
+  echo "  2. DATABASE_URL is correct"
+  echo "  3. Network connectivity between containers"
   exit 1
 fi
 
-# Run migrations
-echo "Running database migrations..."
-npx prisma migrate deploy
+echo ""
 
 # Run seed using compiled JS (skip if fails - likely already seeded)
 echo "Running database seed..."
 if [ -f "prisma/dist/seed.js" ]; then
-  node prisma/dist/seed.js || echo "Seed skipped (already applied or error)"
+  node prisma/dist/seed.js && echo "Seed completed!" || echo "Seed skipped (already applied or error)"
 else
-  echo "Seed script not found, skipping..."
+  echo "Seed script not found at prisma/dist/seed.js, skipping..."
 fi
 
+echo ""
 echo "=========================================="
-echo "Starting API server..."
+echo "Starting API server on port ${PORT:-3001}..."
 echo "=========================================="
 
-# Start the application
+# Start the application (this replaces the shell process)
 exec node dist/main.js
