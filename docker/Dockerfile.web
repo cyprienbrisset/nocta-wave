@@ -49,6 +49,9 @@ RUN pnpm --filter @ws-flows/shared build
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
+# Ensure public directory exists
+RUN mkdir -p /app/apps/web/public
+
 # Build Next.js application
 RUN pnpm --filter @ws-flows/web build
 
@@ -75,6 +78,8 @@ ENV HOSTNAME="0.0.0.0"
 # Copy built application
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
+
+# Copy public folder
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
 
 # Expose port
