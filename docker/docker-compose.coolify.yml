@@ -2,15 +2,39 @@
 # WS-Flows - Docker Compose for Coolify
 # =============================================================================
 #
-# Configuration pour déploiement sur Coolify
+# DÉPLOIEMENT SUR COOLIFY:
+# ========================
 #
-# Dans Coolify:
-# 1. Créer un nouveau projet
-# 2. Ajouter une ressource → Docker Compose
-# 3. Source: votre repo Git
-# 4. Docker Compose Location: docker/docker-compose.coolify.yml
-# 5. Configurer les variables d'environnement (voir ci-dessous)
-# 6. Configurer les domaines pour les services 'web' et 'api'
+# 1. Dans Coolify, créer un nouveau projet "WS-Flows"
+#
+# 2. Ajouter une ressource → "Docker Compose"
+#    - Source: Connecter votre repo Git
+#    - Docker Compose Location: docker/docker-compose.coolify.yml
+#
+# 3. Configurer les VARIABLES D'ENVIRONNEMENT (Environment Variables):
+#
+#    # Sécurité (OBLIGATOIRE - générer des valeurs uniques)
+#    JWT_SECRET=<générer: openssl rand -base64 64>
+#    REFRESH_TOKEN_SECRET=<générer: openssl rand -base64 64>
+#    ENCRYPTION_KEY=<générer: openssl rand -hex 32>
+#
+#    # Admin (OBLIGATOIRE - changez le mot de passe!)
+#    ADMIN_PASSWORD=votre-mot-de-passe-admin-securise
+#
+#    # URLs (adapter à vos domaines Coolify)
+#    CORS_ORIGIN=https://wsflows.votre-domaine.com
+#    NEXT_PUBLIC_API_URL=https://api.wsflows.votre-domaine.com
+#
+# 4. Configurer les DOMAINES dans Coolify:
+#    - Service "web"  → wsflows.votre-domaine.com (port 3000)
+#    - Service "api"  → api.wsflows.votre-domaine.com (port 3001)
+#
+# 5. Déployer!
+#
+# CREDENTIALS PAR DÉFAUT:
+# =======================
+# Email:    admin@wsflows.local
+# Password: (voir variable ADMIN_PASSWORD, défaut: admin123)
 #
 # =============================================================================
 
@@ -21,9 +45,9 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-wsflows}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wsflows-secret-password}
-      POSTGRES_DB: ${POSTGRES_DB:-wsflows}
+      POSTGRES_USER: wsflows
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wsflows-db-password-change-me}
+      POSTGRES_DB: wsflows
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -55,24 +79,8 @@ services:
       - wsflows-network
 
   # ---------------------------------------------------------------------------
-  # Database Migration (runs once on startup)
-  # ---------------------------------------------------------------------------
-  migrate:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.api
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-wsflows}:${POSTGRES_PASSWORD:-wsflows-secret-password}@postgres:5432/${POSTGRES_DB:-wsflows}
-    command: sh -c "npx prisma migrate deploy && npx prisma db seed || true"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - wsflows-network
-    restart: "no"
-
-  # ---------------------------------------------------------------------------
   # API Backend (NestJS)
+  # Migrations et Seed sont exécutés automatiquement au démarrage
   # ---------------------------------------------------------------------------
   api:
     build:
@@ -82,18 +90,20 @@ services:
       NODE_ENV: production
       PORT: 3001
       # Database
-      DATABASE_URL: postgresql://${POSTGRES_USER:-wsflows}:${POSTGRES_PASSWORD:-wsflows-secret-password}@postgres:5432/${POSTGRES_DB:-wsflows}
+      DATABASE_URL: postgresql://wsflows:${POSTGRES_PASSWORD:-wsflows-db-password-change-me}@postgres:5432/wsflows
       # Redis
       REDIS_URL: redis://redis:6379
-      # Auth
-      JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-characters-long}
+      # Auth - IMPORTANT: Générer des secrets uniques!
+      JWT_SECRET: ${JWT_SECRET:-CHANGE-ME-jwt-secret-at-least-32-characters-long-and-random}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-change-me-refresh-token-secret-32-chars}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-CHANGE-ME-refresh-token-secret-32-chars-random}
       REFRESH_TOKEN_EXPIRES_IN: ${REFRESH_TOKEN_EXPIRES_IN:-30d}
-      # Encryption
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change-me-encryption-key-32-chars}
-      # CORS - Coolify injecte automatiquement COOLIFY_URL ou configurer manuellement
+      # Encryption - IMPORTANT: Générer une clé unique!
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-CHANGE-ME-encryption-key-32-characters}
+      # CORS
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      # Admin password for seed
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
     ports:
       - "3001:3001"
     depends_on:
@@ -101,8 +111,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
     restart: always
     networks:
       - wsflows-network
@@ -111,10 +119,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
-    labels:
-      - "coolify.managed=true"
-      - "coolify.type=api"
+      start_period: 90s
 
   # ---------------------------------------------------------------------------
   # Web Frontend (Next.js)
@@ -124,10 +129,10 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.web
       args:
-        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api}
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://api:3001}
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:3001}
     ports:
       - "3000:3000"
     depends_on:
@@ -141,10 +146,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
-    labels:
-      - "coolify.managed=true"
-      - "coolify.type=web"
+      start_period: 60s
 
 # =============================================================================
 # Volumes (persistants)
