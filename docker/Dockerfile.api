@@ -54,8 +54,14 @@ RUN cd apps/api && npx prisma generate
 # Build API
 RUN pnpm --filter @ws-flows/api build
 
-# Compile seed script for production
-RUN cd apps/api && npx tsc prisma/seed.ts --outDir prisma/dist --esModuleInterop --skipLibCheck || true
+# Compile seed script for production (CommonJS for Node.js compatibility)
+RUN cd apps/api && npx tsc prisma/seed.ts \
+    --outDir prisma/dist \
+    --esModuleInterop \
+    --skipLibCheck \
+    --module commonjs \
+    --moduleResolution node \
+    --target es2020 || true
 
 # -----------------------------------------------------------------------------
 # Stage 3: Production Runner
@@ -100,8 +106,8 @@ EXPOSE 3001
 # Switch to non-root user
 USER nestjs
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+# Health check (start_period long enough for migrations + seed)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/health || exit 1
 
 # Start application with dumb-init for proper signal handling
