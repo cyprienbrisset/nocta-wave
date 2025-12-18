@@ -1,0 +1,163 @@
+# =============================================================================
+# WS-Flows - Docker Compose for Coolify
+# =============================================================================
+#
+# Configuration pour déploiement sur Coolify
+#
+# Dans Coolify:
+# 1. Créer un nouveau projet
+# 2. Ajouter une ressource → Docker Compose
+# 3. Source: votre repo Git
+# 4. Docker Compose Location: docker/docker-compose.coolify.yml
+# 5. Configurer les variables d'environnement (voir ci-dessous)
+# 6. Configurer les domaines pour les services 'web' et 'api'
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wsflows}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wsflows-secret-password}
+      POSTGRES_DB: ${POSTGRES_DB:-wsflows}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U wsflows -d wsflows']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: always
+    networks:
+      - wsflows-network
+
+  # ---------------------------------------------------------------------------
+  # Redis Cache & Queue
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: always
+    command: redis-server --appendonly yes
+    networks:
+      - wsflows-network
+
+  # ---------------------------------------------------------------------------
+  # Database Migration (runs once on startup)
+  # ---------------------------------------------------------------------------
+  migrate:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wsflows}:${POSTGRES_PASSWORD:-wsflows-secret-password}@postgres:5432/${POSTGRES_DB:-wsflows}
+    command: sh -c "npx prisma migrate deploy && npx prisma db seed || true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - wsflows-network
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # API Backend (NestJS)
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wsflows}:${POSTGRES_PASSWORD:-wsflows-secret-password}@postgres:5432/${POSTGRES_DB:-wsflows}
+      # Redis
+      REDIS_URL: redis://redis:6379
+      # Auth
+      JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-characters-long}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-change-me-refresh-token-secret-32-chars}
+      REFRESH_TOKEN_EXPIRES_IN: ${REFRESH_TOKEN_EXPIRES_IN:-30d}
+      # Encryption
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change-me-encryption-key-32-chars}
+      # CORS - Coolify injecte automatiquement COOLIFY_URL ou configurer manuellement
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: always
+    networks:
+      - wsflows-network
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3001/api/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "coolify.managed=true"
+      - "coolify.type=api"
+
+  # ---------------------------------------------------------------------------
+  # Web Frontend (Next.js)
+  # ---------------------------------------------------------------------------
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api}
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: always
+    networks:
+      - wsflows-network
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - "coolify.managed=true"
+      - "coolify.type=web"
+
+# =============================================================================
+# Volumes (persistants)
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  wsflows-network:
+    driver: bridge

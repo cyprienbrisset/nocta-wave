@@ -54,6 +54,9 @@ RUN cd apps/api && npx prisma generate
 # Build API
 RUN pnpm --filter @ws-flows/api build
 
+# Compile seed script for production
+RUN cd apps/api && npx tsc prisma/seed.ts --outDir prisma/dist --esModuleInterop --skipLibCheck || true
+
 # -----------------------------------------------------------------------------
 # Stage 3: Production Runner
 # -----------------------------------------------------------------------------
@@ -83,6 +86,10 @@ COPY --from=builder --chown=nestjs:nodejs /app/packages/shared/package.json ./no
 COPY --from=builder --chown=nestjs:nodejs /app/packages/nodes/dist ./node_modules/@ws-flows/nodes/dist
 COPY --from=builder --chown=nestjs:nodejs /app/packages/nodes/package.json ./node_modules/@ws-flows/nodes/
 
+# Copy entrypoint script
+COPY --chown=nestjs:nodejs docker/entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
+
 # Set environment
 ENV NODE_ENV=production
 ENV PORT=3001
@@ -94,9 +101,9 @@ EXPOSE 3001
 USER nestjs
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/health || exit 1
 
 # Start application with dumb-init for proper signal handling
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "dist/main.js"]
+CMD ["./entrypoint.sh"]

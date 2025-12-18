@@ -42,6 +42,9 @@
     "uuid": "^9.0.1",
     "zod": "^3.22.4"
   },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "devDependencies": {
     "@nestjs/cli": "^10.3.0",
     "@nestjs/schematics": "^10.1.0",
