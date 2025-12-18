@@ -54,17 +54,15 @@ RUN cd apps/api && ./node_modules/.bin/prisma generate
 # Build API
 RUN pnpm --filter @ws-flows/api build
 
-# Verify build succeeded
-RUN ls -la apps/api/dist/main.js || (echo "ERROR: Build failed - dist/main.js not found" && exit 1)
+# Debug: show what was built
+RUN echo "=== Build output ===" && ls -la apps/api/dist/ && ls -la apps/api/dist/src/ 2>/dev/null || true
 
-# Compile seed script for production (CommonJS for Node.js compatibility)
-RUN cd apps/api && npx tsc prisma/seed.ts \
-    --outDir prisma/dist \
-    --esModuleInterop \
-    --skipLibCheck \
-    --module commonjs \
-    --moduleResolution node \
-    --target es2020 || true
+# Verify build succeeded (NestJS outputs to dist/src/ when prisma is included in tsconfig)
+RUN ls -la apps/api/dist/src/main.js || ls -la apps/api/dist/main.js || (echo "ERROR: Build failed - main.js not found" && exit 1)
+
+# Seed script is already compiled by NestJS build to dist/prisma/seed.js
+# Debug: verify seed was compiled
+RUN ls -la apps/api/dist/prisma/ 2>/dev/null || echo "Warning: dist/prisma not found"
 
 # -----------------------------------------------------------------------------
 # Stage 3: Production Runner
@@ -80,10 +78,12 @@ RUN adduser --system --uid 1001 nestjs
 
 WORKDIR /app
 
-# Copy built application
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist ./dist
+# Copy built application (NestJS outputs to dist/src/ due to tsconfig include of prisma)
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist/src ./dist
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/package.json ./
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/prisma ./prisma
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/prisma/schema.prisma ./prisma/
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/prisma/migrations ./prisma/migrations
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist/prisma ./prisma/dist
 
 # Copy node_modules (includes Prisma CLI and client)
 COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
