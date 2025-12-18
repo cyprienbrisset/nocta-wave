@@ -48,11 +48,14 @@ COPY . .
 RUN pnpm --filter @ws-flows/shared build
 RUN pnpm --filter @ws-flows/nodes build
 
-# Generate Prisma client
-RUN cd apps/api && npx prisma generate
+# Generate Prisma client (use local version, not npx)
+RUN cd apps/api && ./node_modules/.bin/prisma generate
 
 # Build API
 RUN pnpm --filter @ws-flows/api build
+
+# Verify build succeeded
+RUN ls -la apps/api/dist/main.js || (echo "ERROR: Build failed - dist/main.js not found" && exit 1)
 
 # Compile seed script for production (CommonJS for Node.js compatibility)
 RUN cd apps/api && npx tsc prisma/seed.ts \
@@ -82,9 +85,12 @@ COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/package.json ./
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/prisma ./prisma
 
-# Copy node_modules (production only would require separate install)
+# Copy node_modules (includes Prisma CLI and client)
 COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/node_modules ./apps_node_modules
+
+# Copy Prisma generated client explicitly
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 # Copy built shared packages
 COPY --from=builder --chown=nestjs:nodejs /app/packages/shared/dist ./node_modules/@ws-flows/shared/dist

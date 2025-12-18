@@ -18,7 +18,7 @@ echo "╔═══════════════════════�
 echo "║                     WS-Flows Starter                      ║"
 echo "║            Workflow Automation Platform                   ║"
 echo "║                                                           ║"
-echo "║  Services: API • Web • PostgreSQL • Redis • Trigger.dev   ║"
+echo "║          Services: API • Web • PostgreSQL • Redis         ║"
 echo "╚═══════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
@@ -70,12 +70,6 @@ setup_env() {
         JWT_SECRET=$(openssl rand -base64 64 | tr -d '\n')
         REFRESH_TOKEN_SECRET=$(openssl rand -base64 64 | tr -d '\n')
         ENCRYPTION_KEY=$(openssl rand -hex 32)
-        POSTGRES_PASSWORD=$(openssl rand -hex 16)
-        REDIS_PASSWORD=$(openssl rand -hex 16)
-        TRIGGER_MAGIC_LINK=$(openssl rand -hex 32)
-        TRIGGER_SESSION=$(openssl rand -hex 32)
-        TRIGGER_ENCRYPTION=$(openssl rand -hex 32)
-        TRIGGER_WORKER=$(openssl rand -hex 32)
 
         # Update .env with generated secrets
         if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -83,33 +77,11 @@ setup_env() {
             sed -i '' "s/your-jwt-secret-min-32-chars/$JWT_SECRET/" .env
             sed -i '' "s/your-refresh-token-secret-min-32-chars/$REFRESH_TOKEN_SECRET/" .env
             sed -i '' "s/your-encryption-key-min-32-chars/$ENCRYPTION_KEY/" .env
-            sed -i '' "s/POSTGRES_PASSWORD=password/POSTGRES_PASSWORD=$POSTGRES_PASSWORD/" .env
-            sed -i '' "s/REDIS_PASSWORD=password/REDIS_PASSWORD=$REDIS_PASSWORD/" .env
-            # Update DATABASE_URL with new password
-            sed -i '' "s|postgresql://postgres:password@|postgresql://postgres:$POSTGRES_PASSWORD@|" .env
-            # Update REDIS_URL with new password
-            sed -i '' "s|redis://:password@|redis://:$REDIS_PASSWORD@|" .env
-            # Update Trigger.dev secrets
-            sed -i '' "s/change-me-trigger-magic-link-secret-32-chars/$TRIGGER_MAGIC_LINK/" .env
-            sed -i '' "s/change-me-trigger-session-secret-32-chars/$TRIGGER_SESSION/" .env
-            sed -i '' "s/change-me-trigger-encryption-key-32-chars/$TRIGGER_ENCRYPTION/" .env
-            sed -i '' "s/change-me-worker-secret/$TRIGGER_WORKER/" .env
         else
             # Linux
             sed -i "s/your-jwt-secret-min-32-chars/$JWT_SECRET/" .env
             sed -i "s/your-refresh-token-secret-min-32-chars/$REFRESH_TOKEN_SECRET/" .env
             sed -i "s/your-encryption-key-min-32-chars/$ENCRYPTION_KEY/" .env
-            sed -i "s/POSTGRES_PASSWORD=password/POSTGRES_PASSWORD=$POSTGRES_PASSWORD/" .env
-            sed -i "s/REDIS_PASSWORD=password/REDIS_PASSWORD=$REDIS_PASSWORD/" .env
-            # Update DATABASE_URL with new password
-            sed -i "s|postgresql://postgres:password@|postgresql://postgres:$POSTGRES_PASSWORD@|" .env
-            # Update REDIS_URL with new password
-            sed -i "s|redis://:password@|redis://:$REDIS_PASSWORD@|" .env
-            # Update Trigger.dev secrets
-            sed -i "s/change-me-trigger-magic-link-secret-32-chars/$TRIGGER_MAGIC_LINK/" .env
-            sed -i "s/change-me-trigger-session-secret-32-chars/$TRIGGER_SESSION/" .env
-            sed -i "s/change-me-trigger-encryption-key-32-chars/$TRIGGER_ENCRYPTION/" .env
-            sed -i "s/change-me-worker-secret/$TRIGGER_WORKER/" .env
         fi
 
         echo -e "  ${GREEN}✓${NC} Environment file created with secure secrets"
@@ -132,11 +104,8 @@ install_deps() {
 start_docker() {
     echo -e "${YELLOW}[4/6] Starting Docker services...${NC}"
 
-    # Copy .env to docker folder so docker-compose can use it
-    cp "$ROOT_DIR/.env" "$ROOT_DIR/docker/.env"
-
-    echo -e "  Starting PostgreSQL, Redis, and Trigger.dev..."
-    docker compose -f docker/docker-compose.yml --env-file "$ROOT_DIR/.env" up -d
+    echo -e "  Starting PostgreSQL and Redis..."
+    docker compose -f docker/docker-compose.yml up -d
 
     # Wait for services to be ready
     echo -e "  Waiting for services to be ready..."
@@ -156,19 +125,6 @@ start_docker() {
         sleep 2
     done
     echo -e " ${GREEN}ready${NC}"
-
-    # Check Trigger.dev PostgreSQL
-    echo -ne "  Trigger.dev DB: "
-    until docker exec wsflows-trigger-postgres pg_isready -U trigger > /dev/null 2>&1; do
-        echo -n "."
-        sleep 2
-    done
-    echo -e " ${GREEN}ready${NC}"
-
-    # Check Trigger.dev webapp
-    echo -ne "  Trigger.dev: "
-    sleep 10
-    echo -e " ${GREEN}starting${NC}"
 
     echo -e "${GREEN}✓ Docker services running${NC}"
     echo ""
@@ -210,7 +166,6 @@ start_services() {
     echo -e "${CYAN}║${NC}  ${GREEN}Web UI${NC}        →  http://localhost:4000                  ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  ${GREEN}API${NC}           →  http://localhost:4001                  ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  ${GREEN}API Docs${NC}      →  http://localhost:4001/docs             ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  ${GREEN}Trigger.dev${NC}   →  http://localhost:4002                  ${CYAN}║${NC}"
     echo -e "${CYAN}╠═══════════════════════════════════════════════════════════╣${NC}"
     echo -e "${CYAN}║${NC}                    Default Credentials                     ${CYAN}║${NC}"
     echo -e "${CYAN}╠═══════════════════════════════════════════════════════════╣${NC}"
@@ -218,14 +173,13 @@ start_services() {
     echo -e "${CYAN}║${NC}  ${YELLOW}Password${NC}: admin123                                      ${CYAN}║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "${YELLOW}Note:${NC} First time with Trigger.dev? Create an account at http://localhost:4002"
-    echo -e "${YELLOW}      Check Docker logs for the magic link:${NC} docker logs wsflows-trigger"
+    echo -e "${YELLOW}Note:${NC} Change the admin password after first login!"
     echo ""
     echo -e "${GREEN}Starting development servers...${NC}"
     echo ""
 
-    # Start in development mode (excluding worker since Trigger.dev handles execution)
-    pnpm dev --filter='!@ws-flows/worker'
+    # Start in development mode
+    pnpm dev
 }
 
 # Main execution

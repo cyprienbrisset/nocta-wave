@@ -12,14 +12,15 @@ echo ""
 
 # Debug: check files
 echo "Checking required files..."
-ls -la dist/main.js 2>/dev/null && echo "OK: dist/main.js exists" || echo "ERROR: dist/main.js not found!"
-ls -la prisma/schema.prisma 2>/dev/null && echo "OK: prisma/schema.prisma exists" || echo "ERROR: prisma/schema.prisma not found!"
-ls -la node_modules/.prisma/client 2>/dev/null && echo "OK: Prisma client exists" || echo "WARNING: Prisma client may need regeneration"
+ls -la dist/main.js 2>/dev/null && echo "OK: dist/main.js exists" || { echo "ERROR: dist/main.js not found!"; exit 1; }
+ls -la prisma/schema.prisma 2>/dev/null && echo "OK: prisma/schema.prisma exists" || echo "WARNING: prisma/schema.prisma not found"
+ls -la node_modules/.prisma/client/index.js 2>/dev/null && echo "OK: Prisma client exists" || echo "WARNING: Prisma client may be missing"
+ls -la node_modules/.bin/prisma 2>/dev/null && echo "OK: Prisma CLI exists" || echo "WARNING: Prisma CLI not found"
 echo ""
 
-# Regenerate Prisma client for this platform (fixes openssl issues)
-echo "Regenerating Prisma client for current platform..."
-npx prisma generate 2>&1 || echo "Warning: Prisma generate had issues"
+# Check Prisma version
+echo "Prisma version:"
+./node_modules/.bin/prisma --version 2>&1 || echo "Could not get Prisma version"
 echo ""
 
 # Debug: try to resolve postgres hostname
@@ -38,8 +39,8 @@ while [ $attempt -le $max_attempts ]; do
   echo ""
   echo "=== Attempt $attempt/$max_attempts ==="
 
-  # Try to run prisma migrate deploy - it will fail if DB is not ready
-  output=$(npx prisma migrate deploy 2>&1)
+  # Try to run prisma migrate deploy using local version
+  output=$(./node_modules/.bin/prisma migrate deploy 2>&1)
   exit_code=$?
 
   echo "$output"
