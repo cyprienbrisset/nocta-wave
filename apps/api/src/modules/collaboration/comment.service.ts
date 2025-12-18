@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TeamService } from '../team/team.service';
 import { CreateCommentDto, UpdateCommentDto, CommentQueryDto } from './dto/comment.dto';
@@ -49,7 +50,7 @@ export class CommentService {
         authorId: userId,
         content: dto.content,
         parentId: dto.parentId,
-        position: dto.position,
+        position: dto.position as Prisma.InputJsonValue | undefined,
       },
       include: {
         author: {
@@ -203,7 +204,7 @@ export class CommentService {
       data: {
         content: dto.content,
         resolved: dto.resolved,
-        position: dto.position,
+        position: dto.position as Prisma.InputJsonValue | undefined,
       },
       include: {
         author: {
