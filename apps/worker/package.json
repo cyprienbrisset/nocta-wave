@@ -1,0 +1,27 @@
+{
+  "name": "@ws-flows/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx trigger dev",
+    "build": "tsc",
+    "start": "npx trigger start",
+    "deploy": "npx trigger deploy"
+  },
+  "dependencies": {
+    "@trigger.dev/sdk": "^3.0.0",
+    "@prisma/client": "^5.8.0",
+    "@ws-flows/nodes": "workspace:*",
+    "@ws-flows/shared": "workspace:*",
+    "ioredis": "^5.3.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@trigger.dev/build": "^3.0.0",
+    "@types/node": "^20.10.6",
+    "prisma": "^5.8.0",
+    "trigger.dev": "^3.0.0",
+    "typescript": "^5.3.3"
+  }
+}

@@ -1,0 +1,217 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Thème bleu moderne inspiré du design */
+    --background: 210 50% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 217 91% 60%;
+    --radius: 0.75rem;
+
+    /* Couleurs personnalisées pour le workflow editor */
+    --sidebar-bg: 217 91% 60%;
+    --sidebar-foreground: 0 0% 100%;
+    --node-trigger: 142 71% 45%;
+    --node-http: 217 91% 60%;
+    --node-transform: 262 83% 58%;
+    --node-logic: 25 95% 53%;
+    --node-database: 199 89% 48%;
+    --node-integration: 280 87% 60%;
+    --node-utility: 215 16% 47%;
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    --card: 223 47% 16%;
+    --card-foreground: 210 40% 98%;
+    --popover: 223 47% 16%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 217 91% 60%;
+
+    --sidebar-bg: 223 47% 16%;
+    --sidebar-foreground: 210 40% 98%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+@layer components {
+  /* Boutons stylisés */
+  .btn-flow {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200;
+    @apply bg-primary text-primary-foreground shadow-md hover:shadow-lg hover:brightness-110;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2;
+  }
+
+  .btn-flow-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200;
+    @apply border-2 border-primary/20 bg-white text-foreground hover:border-primary/40 hover:bg-primary/5;
+  }
+
+  /* Cards de nodes */
+  .node-card {
+    @apply rounded-xl border bg-card p-4 shadow-sm transition-all duration-200;
+    @apply hover:shadow-md hover:border-primary/30;
+  }
+
+  /* Sidebar de la librairie */
+  .library-sidebar {
+    @apply bg-gradient-to-b from-primary to-primary/90 text-primary-foreground;
+  }
+
+  /* Badges de catégories */
+  .category-badge {
+    @apply inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium;
+  }
+
+  .category-badge-trigger {
+    @apply bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400;
+  }
+
+  .category-badge-http {
+    @apply bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400;
+  }
+
+  .category-badge-transform {
+    @apply bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400;
+  }
+
+  .category-badge-logic {
+    @apply bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400;
+  }
+
+  .category-badge-database {
+    @apply bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400;
+  }
+
+  .category-badge-integration {
+    @apply bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400;
+  }
+
+  .category-badge-utility {
+    @apply bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400;
+  }
+}
+
+/* React Flow customizations - Thème moderne */
+.react-flow__node {
+  @apply rounded-xl border-0 bg-card shadow-lg;
+}
+
+.react-flow__node.selected {
+  @apply ring-2 ring-primary ring-offset-2;
+}
+
+.react-flow__node:hover {
+  @apply shadow-xl;
+}
+
+.react-flow__edge-path {
+  stroke: hsl(var(--muted-foreground));
+  stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: hsl(var(--primary));
+  stroke-width: 3;
+}
+
+.react-flow__handle {
+  @apply h-3 w-3 rounded-full border-2 border-white bg-primary shadow-md;
+}
+
+.react-flow__handle:hover {
+  @apply scale-125;
+}
+
+.react-flow__background {
+  background-color: hsl(var(--background));
+}
+
+.react-flow__minimap {
+  @apply rounded-xl border shadow-lg overflow-hidden;
+}
+
+.react-flow__controls {
+  @apply rounded-xl border shadow-lg overflow-hidden;
+}
+
+.react-flow__controls-button {
+  @apply border-b border-border bg-card hover:bg-muted;
+}
+
+.react-flow__controls-button:last-child {
+  @apply border-b-0;
+}
+
+/* Animation pour les nodes */
+@keyframes node-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px hsl(var(--primary) / 0);
+  }
+}
+
+.react-flow__node.running {
+  animation: node-pulse 2s infinite;
+}
+
+/* Scrollbar personnalisée */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}

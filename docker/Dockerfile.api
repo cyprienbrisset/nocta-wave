@@ -1,0 +1,102 @@
+# =============================================================================
+# WS-Flows API Dockerfile
+# Multi-stage build for NestJS API with Prisma
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Dependencies
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS deps
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+
+WORKDIR /app
+
+# Copy workspace configuration
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY turbo.json ./
+
+# Copy package.json files for all packages
+COPY apps/api/package.json ./apps/api/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/nodes/package.json ./packages/nodes/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# -----------------------------------------------------------------------------
+# Stage 2: Builder
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS builder
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+
+WORKDIR /app
+
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=deps /app/packages/nodes/node_modules ./packages/nodes/node_modules
+
+# Copy source code
+COPY . .
+
+# Build shared packages first
+RUN pnpm --filter @ws-flows/shared build
+RUN pnpm --filter @ws-flows/nodes build
+
+# Generate Prisma client
+RUN cd apps/api && npx prisma generate
+
+# Build API
+RUN pnpm --filter @ws-flows/api build
+
+# -----------------------------------------------------------------------------
+# Stage 3: Production Runner
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS runner
+
+# Install necessary packages
+RUN apk add --no-cache dumb-init
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nestjs
+
+WORKDIR /app
+
+# Copy built application
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist ./dist
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/package.json ./
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/prisma ./prisma
+
+# Copy node_modules (production only would require separate install)
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/node_modules ./apps_node_modules
+
+# Copy built shared packages
+COPY --from=builder --chown=nestjs:nodejs /app/packages/shared/dist ./node_modules/@ws-flows/shared/dist
+COPY --from=builder --chown=nestjs:nodejs /app/packages/shared/package.json ./node_modules/@ws-flows/shared/
+COPY --from=builder --chown=nestjs:nodejs /app/packages/nodes/dist ./node_modules/@ws-flows/nodes/dist
+COPY --from=builder --chown=nestjs:nodejs /app/packages/nodes/package.json ./node_modules/@ws-flows/nodes/
+
+# Set environment
+ENV NODE_ENV=production
+ENV PORT=3001
+
+# Expose port
+EXPOSE 3001
+
+# Switch to non-root user
+USER nestjs
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/health || exit 1
+
+# Start application with dumb-init for proper signal handling
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "dist/main.js"]

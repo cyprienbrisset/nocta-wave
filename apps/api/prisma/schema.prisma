@@ -1,0 +1,406 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// AUTHENTICATION & USERS
+// ============================================================================
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String?
+  avatar       String?
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  teamMemberships   TeamMember[]
+  apiKeys           ApiKey[]
+  refreshTokens     RefreshToken[]
+  createdWorkflows  Workflow[]         @relation("WorkflowCreator")
+  executions        Execution[]
+  comments          Comment[]
+  createdTemplates  WorkflowTemplate[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model ApiKey {
+  id        String    @id @default(uuid())
+  name      String
+  keyHash   String    @unique @map("key_hash")
+  prefix    String    // First 8 chars for display
+  userId    String    @map("user_id")
+  teamId    String?   @map("team_id")
+  scopes    String[]  @default([])
+  expiresAt DateTime? @map("expires_at")
+  lastUsed  DateTime? @map("last_used")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team? @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([teamId])
+  @@map("api_keys")
+}
+
+// ============================================================================
+// TEAMS & RBAC
+// ============================================================================
+
+model Team {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  avatar    String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  members     TeamMember[]
+  workflows   Workflow[]
+  credentials Credential[]
+  apiKeys     ApiKey[]
+  tags        Tag[]
+  templates   WorkflowTemplate[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  teamId    String   @map("team_id")
+  role      TeamRole @default(MEMBER)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@index([teamId])
+  @@map("team_members")
+}
+
+enum TeamRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+// ============================================================================
+// WORKFLOWS
+// ============================================================================
+
+model Workflow {
+  id          String         @id @default(uuid())
+  name        String
+  description String?
+  teamId      String         @map("team_id")
+  createdById String         @map("created_by_id")
+  status      WorkflowStatus @default(DRAFT)
+  isActive    Boolean        @default(false) @map("is_active")
+  version     Int            @default(1)
+  graph       Json           // Workflow graph (nodes, edges, viewport)
+  settings    Json?          // Workflow settings (retry, timeout, etc.)
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  team       Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy  User              @relation("WorkflowCreator", fields: [createdById], references: [id])
+  executions Execution[]
+  versions   WorkflowVersion[]
+  webhooks   Webhook[]
+  schedules  Schedule[]
+  comments   Comment[]
+  tags       WorkflowTag[]
+
+  @@index([teamId])
+  @@index([createdById])
+  @@index([status])
+  @@map("workflows")
+}
+
+model WorkflowVersion {
+  id         String   @id @default(uuid())
+  workflowId String   @map("workflow_id")
+  version    Int
+  graph      Json
+  settings   Json?
+  changelog  String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, version])
+  @@index([workflowId])
+  @@map("workflow_versions")
+}
+
+enum WorkflowStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+// ============================================================================
+// EXECUTIONS
+// ============================================================================
+
+model Execution {
+  id           String          @id @default(uuid())
+  workflowId   String          @map("workflow_id")
+  triggeredBy  String?         @map("triggered_by")
+  triggerType  TriggerType     @map("trigger_type")
+  status       ExecutionStatus @default(PENDING)
+  startedAt    DateTime?       @map("started_at")
+  finishedAt   DateTime?       @map("finished_at")
+  duration     Int?            // Duration in milliseconds
+  errorMessage String?         @map("error_message")
+  inputData    Json?           @map("input_data")
+  outputData   Json?           @map("output_data")
+  metadata     Json?
+  createdAt    DateTime        @default(now()) @map("created_at")
+
+  // Relations
+  workflow  Workflow         @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  user      User?            @relation(fields: [triggeredBy], references: [id], onDelete: SetNull)
+  nodeLogs  ExecutionLog[]
+
+  @@index([workflowId])
+  @@index([triggeredBy])
+  @@index([status])
+  @@index([createdAt])
+  @@map("executions")
+}
+
+model ExecutionLog {
+  id          String        @id @default(uuid())
+  executionId String        @map("execution_id")
+  nodeId      String        @map("node_id")
+  nodeType    String        @map("node_type")
+  nodeName    String?       @map("node_name")
+  status      NodeLogStatus @default(PENDING)
+  inputData   Json?         @map("input_data")
+  outputData  Json?         @map("output_data")
+  error       String?
+  startedAt   DateTime?     @map("started_at")
+  finishedAt  DateTime?     @map("finished_at")
+  duration    Int?
+  retryCount  Int           @default(0) @map("retry_count")
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  execution Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@index([executionId])
+  @@index([nodeId])
+  @@map("execution_logs")
+}
+
+enum ExecutionStatus {
+  PENDING
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+  TIMEOUT
+}
+
+enum NodeLogStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum TriggerType {
+  MANUAL
+  SCHEDULE
+  WEBHOOK
+  API
+  POLL
+}
+
+// ============================================================================
+// CREDENTIALS
+// ============================================================================
+
+model Credential {
+  id        String         @id @default(uuid())
+  name      String
+  type      CredentialType
+  teamId    String         @map("team_id")
+  data      String         // Encrypted JSON
+  metadata  Json?
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([name, teamId])
+  @@index([teamId])
+  @@index([type])
+  @@map("credentials")
+}
+
+enum CredentialType {
+  API_KEY
+  OAUTH2
+  BASIC_AUTH
+  DATABASE
+  AWS
+  CUSTOM
+}
+
+// ============================================================================
+// WEBHOOKS & SCHEDULES
+// ============================================================================
+
+model Webhook {
+  id         String   @id @default(uuid())
+  workflowId String   @map("workflow_id")
+  path       String   @unique // /webhook/{path}
+  method     String   @default("POST")
+  isActive   Boolean  @default(true) @map("is_active")
+  secret     String?  // For signature verification
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@index([path])
+  @@map("webhooks")
+}
+
+model Schedule {
+  id           String   @id @default(uuid())
+  workflowId   String   @map("workflow_id")
+  cron         String   // Cron expression
+  timezone     String   @default("UTC")
+  isActive     Boolean  @default(true) @map("is_active")
+  lastRunAt    DateTime? @map("last_run_at")
+  nextRunAt    DateTime? @map("next_run_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@index([nextRunAt])
+  @@map("schedules")
+}
+
+// ============================================================================
+// COLLABORATION
+// ============================================================================
+
+model Comment {
+  id         String   @id @default(uuid())
+  workflowId String   @map("workflow_id")
+  nodeId     String?  @map("node_id") // Optional: comment on specific node
+  authorId   String   @map("author_id")
+  content    String
+  resolved   Boolean  @default(false)
+  parentId   String?  @map("parent_id") // For replies
+  position   Json?    // {x, y} position on canvas if pinned
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  workflow Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  Comment[] @relation("CommentReplies")
+
+  @@index([workflowId])
+  @@index([nodeId])
+  @@index([authorId])
+  @@map("comments")
+}
+
+model Tag {
+  id        String   @id @default(uuid())
+  name      String
+  color     String   @default("#6366f1")
+  teamId    String   @map("team_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  team      Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  workflows WorkflowTag[]
+
+  @@unique([name, teamId])
+  @@index([teamId])
+  @@map("tags")
+}
+
+model WorkflowTag {
+  workflowId String @map("workflow_id")
+  tagId      String @map("tag_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([workflowId, tagId])
+  @@index([tagId])
+  @@map("workflow_tags")
+}
+
+// ============================================================================
+// WORKFLOW TEMPLATES
+// ============================================================================
+
+model WorkflowTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  category    String   // e.g., "automation", "integration", "data-sync"
+  icon        String?
+  graph       Json     // Template workflow graph
+  settings    Json?
+  isPublic    Boolean  @default(false) @map("is_public")
+  teamId      String?  @map("team_id") // null for global templates
+  createdById String?  @map("created_by_id")
+  usageCount  Int      @default(0) @map("usage_count")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  team      Team? @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([teamId])
+  @@index([category])
+  @@index([isPublic])
+  @@map("workflow_templates")
+}

@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod:*)",
+      "Bash(lsof:*)",
+      "Bash(for port in 5434 5435 5436)",
+      "Bash(do lsof -i :$port)",
+      "Bash(echo:*)",
+      "Bash(docker volume rm:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm build:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker ps:*)",
+      "Bash(curl:*)",
+      "Bash(docker exec:*)",
+      "Bash(npx prisma migrate deploy:*)",
+      "Bash(docker logs:*)",
+      "Bash(pnpm --filter @ws-flows/nodes build:*)",
+      "Bash(pnpm --filter @ws-flows/web build:*)",
+      "Bash(npx tsc:*)",
+      "Bash(pnpm --filter @ws-flows/api build:*)",
+      "Bash(pnpm --filter @ws-flows/web add next@latest eslint-config-next@latest)",
+      "Bash(cat:*)",
+      "Bash(wc:*)",
+      "Bash(pnpm --filter @ws-flows/shared build:*)",
+      "Bash(node -e:*)",
+      "Bash(ls:*)",
+      "Bash(npx prisma migrate dev:*)"
+    ]
+  }
+}

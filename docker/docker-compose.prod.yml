@@ -1,0 +1,192 @@
+# =============================================================================
+# WS-Flows Production Docker Compose
+# Usage: docker compose -f docker/docker-compose.prod.yml up -d
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: wsflows-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wsflows}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-wsflows}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-wsflows} -d ${POSTGRES_DB:-wsflows}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: always
+    networks:
+      - wsflows-internal
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # ---------------------------------------------------------------------------
+  # Redis Cache & Queue
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: wsflows-redis
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: always
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    networks:
+      - wsflows-internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # API Backend (NestJS)
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+      args:
+        - NODE_ENV=production
+    image: wsflows/api:${VERSION:-latest}
+    container_name: wsflows-api
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wsflows}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-wsflows}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+    ports:
+      - '${API_PORT:-3001}:3001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: always
+    networks:
+      - wsflows-internal
+      - wsflows-public
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`api.${DOMAIN:-localhost}`)"
+      - "traefik.http.services.api.loadbalancer.server.port=3001"
+
+  # ---------------------------------------------------------------------------
+  # Database Migration (runs once)
+  # ---------------------------------------------------------------------------
+  migrate:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    container_name: wsflows-migrate
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wsflows}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-wsflows}
+    command: ["npx", "prisma", "migrate", "deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - wsflows-internal
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # Web Frontend (Next.js)
+  # ---------------------------------------------------------------------------
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+    image: wsflows/web:${VERSION:-latest}
+    container_name: wsflows-web
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    depends_on:
+      - api
+    restart: always
+    networks:
+      - wsflows-public
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.web.rule=Host(`${DOMAIN:-localhost}`)"
+      - "traefik.http.services.web.loadbalancer.server.port=3000"
+
+  # ---------------------------------------------------------------------------
+  # Worker (Trigger.dev)
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    image: wsflows/worker:${VERSION:-latest}
+    container_name: wsflows-worker
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wsflows}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-wsflows}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      TRIGGER_API_URL: ${TRIGGER_API_URL}
+      TRIGGER_API_KEY: ${TRIGGER_API_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    networks:
+      - wsflows-internal
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  wsflows-internal:
+    driver: bridge
+    internal: true
+  wsflows-public:
+    driver: bridge

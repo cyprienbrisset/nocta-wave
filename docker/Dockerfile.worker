@@ -1,0 +1,91 @@
+# =============================================================================
+# WS-Flows Worker Dockerfile
+# Multi-stage build for Trigger.dev worker
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Dependencies
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS deps
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+
+WORKDIR /app
+
+# Copy workspace configuration
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY turbo.json ./
+
+# Copy package.json files for all packages
+COPY apps/worker/package.json ./apps/worker/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/nodes/package.json ./packages/nodes/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# -----------------------------------------------------------------------------
+# Stage 2: Builder
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS builder
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+
+WORKDIR /app
+
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/worker/node_modules ./apps/worker/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=deps /app/packages/nodes/node_modules ./packages/nodes/node_modules
+
+# Copy source code
+COPY . .
+
+# Build shared packages first
+RUN pnpm --filter @ws-flows/shared build
+RUN pnpm --filter @ws-flows/nodes build
+
+# Build worker
+RUN pnpm --filter @ws-flows/worker build
+
+# -----------------------------------------------------------------------------
+# Stage 3: Production Runner
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS runner
+
+# Install necessary packages
+RUN apk add --no-cache dumb-init
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 worker
+
+WORKDIR /app
+
+# Copy built application
+COPY --from=builder --chown=worker:nodejs /app/apps/worker/dist ./dist
+COPY --from=builder --chown=worker:nodejs /app/apps/worker/package.json ./
+COPY --from=builder --chown=worker:nodejs /app/apps/worker/trigger.config.ts ./
+
+# Copy node_modules
+COPY --from=builder --chown=worker:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=worker:nodejs /app/apps/worker/node_modules ./apps_node_modules
+
+# Copy built shared packages
+COPY --from=builder --chown=worker:nodejs /app/packages/shared/dist ./node_modules/@ws-flows/shared/dist
+COPY --from=builder --chown=worker:nodejs /app/packages/shared/package.json ./node_modules/@ws-flows/shared/
+COPY --from=builder --chown=worker:nodejs /app/packages/nodes/dist ./node_modules/@ws-flows/nodes/dist
+COPY --from=builder --chown=worker:nodejs /app/packages/nodes/package.json ./node_modules/@ws-flows/nodes/
+
+# Set environment
+ENV NODE_ENV=production
+
+# Switch to non-root user
+USER worker
+
+# Start Trigger.dev worker with dumb-init for proper signal handling
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["npx", "trigger", "start"]
