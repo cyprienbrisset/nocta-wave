@@ -25,7 +25,20 @@
       "Bash(pnpm --filter @ws-flows/shared build:*)",
       "Bash(node -e:*)",
       "Bash(ls:*)",
-      "Bash(npx prisma migrate dev:*)"
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(pnpm --filter @ws-flows/web add react-resizable-panels)",
+      "Bash(pkill:*)",
+      "Bash(TRIGGER_ACCESS_TOKEN=tr_dev_xXTAvCpvwlcrsvariFqP npx trigger login:*)",
+      "Bash(npx trigger:*)",
+      "Bash(timeout 60 npx trigger:*)",
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(npx prisma generate)",
+      "Bash(npx prisma generate:*)",
+      "Bash(pnpm --filter @ws-flows/web add:*)",
+      "Bash(pnpm test:*)",
+      "Bash(grep:*)",
+      "Bash(pnpm --filter @ws-flows/api add:*)"
     ]
   }
 }

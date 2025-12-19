@@ -18,9 +18,11 @@ import {
 import { cn } from '@/lib/utils';
 
 interface DataInspectorProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
   nodeId?: string | null;
+  embedded?: boolean;
+  className?: string;
 }
 
 function JsonTree({ data, depth = 0, path = '' }: { data: any; depth?: number; path?: string }) {
@@ -109,12 +111,18 @@ function JsonTree({ data, depth = 0, path = '' }: { data: any; depth?: number; p
   return <span className="text-gray-400">{String(data)}</span>;
 }
 
-export function DataInspector({ isOpen, onClose, nodeId }: DataInspectorProps) {
+export function DataInspector({
+  isOpen = true,
+  onClose,
+  nodeId,
+  embedded = false,
+  className,
+}: DataInspectorProps) {
   const { debug, nodes } = useWorkflowStore();
   const [viewMode, setViewMode] = useState<'tree' | 'raw'>('tree');
   const [copied, setCopied] = useState(false);
 
-  if (!isOpen) return null;
+  if (!isOpen && !embedded) return null;
 
   const nodeData = nodeId ? debug.nodeData[nodeId] : null;
   const node = nodeId ? nodes.find((n) => n.id === nodeId) : null;
@@ -125,6 +133,150 @@ export function DataInspector({ isOpen, onClose, nodeId }: DataInspectorProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Embedded mode for panel layout
+  if (embedded) {
+    return (
+      <div className={cn('flex h-full flex-col bg-[#0f0f1a]', className)}>
+        {/* Toolbar */}
+        <div className="flex items-center justify-between border-b border-gray-800/50 bg-[#1a1a2e]/50 px-2 py-1.5">
+          <div className="flex rounded bg-gray-800 p-0.5">
+            <button
+              onClick={() => setViewMode('tree')}
+              className={cn(
+                'px-1.5 py-0.5 text-[10px] rounded transition-colors',
+                viewMode === 'tree'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-400 hover:text-white'
+              )}
+            >
+              Tree
+            </button>
+            <button
+              onClick={() => setViewMode('raw')}
+              className={cn(
+                'px-1.5 py-0.5 text-[10px] rounded transition-colors',
+                viewMode === 'raw'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-400 hover:text-white'
+              )}
+            >
+              Raw
+            </button>
+          </div>
+        </div>
+
+        {/* Node info */}
+        {node && (
+          <div className="px-3 py-2 border-b border-gray-800 bg-[#1a1a2e]/50">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-white">{node.data.label}</span>
+              <span className="text-[10px] text-gray-500">{node.data.nodeType}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto">
+          {!nodeId ? (
+            <div className="flex flex-col items-center justify-center h-full text-gray-500 p-4">
+              <Eye className="h-6 w-6 mb-2 opacity-50" />
+              <p className="text-xs">Aucun node sélectionné</p>
+              <p className="text-[10px] mt-1 text-center">Sélectionnez un node ou clic-droit pour inspecter</p>
+            </div>
+          ) : !nodeData ? (
+            <div className="flex flex-col items-center justify-center h-full text-gray-500 p-4">
+              <Eye className="h-6 w-6 mb-2 opacity-50" />
+              <p className="text-xs">Aucune donnée pour ce node</p>
+              <p className="text-[10px] mt-1 text-center">Exécutez le workflow pour voir les données</p>
+            </div>
+          ) : (
+            <div className="p-3 space-y-3">
+              {/* Input data */}
+              {nodeData.input !== undefined && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <ArrowRight className="h-3 w-3 text-blue-400" />
+                      <span className="text-[10px] font-medium text-blue-400 uppercase">
+                        Input
+                      </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => copyToClipboard(nodeData.input)}
+                      className="h-5 w-5 text-gray-500 hover:text-white"
+                    >
+                      {copied ? <Check className="h-2.5 w-2.5" /> : <Copy className="h-2.5 w-2.5" />}
+                    </Button>
+                  </div>
+                  <div className="rounded bg-gray-900 p-2 text-[10px] font-mono max-h-40 overflow-auto">
+                    {viewMode === 'tree' ? (
+                      <JsonTree data={nodeData.input} />
+                    ) : (
+                      <pre className="whitespace-pre-wrap text-gray-300">
+                        {JSON.stringify(nodeData.input, null, 2)}
+                      </pre>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Output data */}
+              {nodeData.output !== undefined && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <ArrowRight className="h-3 w-3 text-green-400 rotate-180" />
+                      <span className="text-[10px] font-medium text-green-400 uppercase">
+                        Output
+                      </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => copyToClipboard(nodeData.output)}
+                      className="h-5 w-5 text-gray-500 hover:text-white"
+                    >
+                      {copied ? <Check className="h-2.5 w-2.5" /> : <Copy className="h-2.5 w-2.5" />}
+                    </Button>
+                  </div>
+                  <div className="rounded bg-gray-900 p-2 text-[10px] font-mono max-h-40 overflow-auto">
+                    {viewMode === 'tree' ? (
+                      <JsonTree data={nodeData.output} />
+                    ) : (
+                      <pre className="whitespace-pre-wrap text-gray-300">
+                        {JSON.stringify(nodeData.output, null, 2)}
+                      </pre>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Error */}
+              {nodeData.error && (
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <AlertCircle className="h-3 w-3 text-red-400" />
+                    <span className="text-[10px] font-medium text-red-400 uppercase">
+                      Erreur
+                    </span>
+                  </div>
+                  <div className="rounded bg-red-900/20 border border-red-900/50 p-2 text-[10px]">
+                    <pre className="whitespace-pre-wrap text-red-400">
+                      {nodeData.error}
+                    </pre>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Original fixed positioning mode
   return (
     <div className="fixed right-80 top-14 bottom-0 w-96 bg-[#0f0f1a] border-l border-gray-800 z-40 flex flex-col">
       {/* Header */}
@@ -158,14 +310,16 @@ export function DataInspector({ isOpen, onClose, nodeId }: DataInspectorProps) {
               Raw
             </button>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            className="h-7 w-7 p-0 text-gray-400 hover:text-white"
-          >
-            <X className="h-4 w-4" />
-          </Button>
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className="h-7 w-7 p-0 text-gray-400 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
 

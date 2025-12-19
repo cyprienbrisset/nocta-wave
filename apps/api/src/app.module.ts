@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 
 // Database
 import { DatabaseModule } from './database/database.module';
@@ -20,6 +22,18 @@ import { WebhookModule } from './modules/webhook/webhook.module';
 import { HealthModule } from './modules/health/health.module';
 import { CollaborationModule } from './modules/collaboration/collaboration.module';
 
+// Advanced features
+import { AuditModule } from './modules/audit/audit.module';
+import { AlertingModule } from './modules/alerting/alerting.module';
+import { DLQModule } from './modules/dlq/dlq.module';
+import { CacheModule } from './modules/cache/cache.module';
+import { StreamingModule } from './modules/streaming/streaming.module';
+import { SubWorkflowModule } from './modules/subworkflow/subworkflow.module';
+import { TemplateModule } from './modules/template/template.module';
+import { EnvironmentModule } from './modules/environment/environment.module';
+import { BranchModule } from './modules/branch/branch.module';
+import { MonitoringModule } from './modules/monitoring/monitoring.module';
+
 @Module({
   imports: [
     // Configuration - load from monorepo root
@@ -27,6 +41,12 @@ import { CollaborationModule } from './modules/collaboration/collaboration.modul
       isGlobal: true,
       envFilePath: ['../../.env.local', '../../.env', '.env.local', '.env'],
     }),
+
+    // Event emitter for internal events
+    EventEmitterModule.forRoot(),
+
+    // Scheduling for cron jobs
+    ScheduleModule.forRoot(),
 
     // Rate limiting
     ThrottlerModule.forRoot([
@@ -53,6 +73,18 @@ import { CollaborationModule } from './modules/collaboration/collaboration.modul
     WebhookModule,
     HealthModule,
     CollaborationModule,
+
+    // Advanced features
+    AuditModule,
+    AlertingModule,
+    DLQModule,
+    CacheModule,
+    StreamingModule,
+    SubWorkflowModule,
+    TemplateModule,
+    EnvironmentModule,
+    BranchModule,
+    MonitoringModule,
   ],
 })
 export class AppModule {}

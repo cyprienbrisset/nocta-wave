@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "npx trigger dev",
+    "dev": "npx trigger dev --api-url http://localhost:4002",
     "build": "tsc",
     "start": "npx trigger start",
-    "deploy": "npx trigger deploy"
+    "deploy": "npx trigger deploy --api-url http://localhost:4002"
   },
   "dependencies": {
     "@trigger.dev/sdk": "^3.0.0",

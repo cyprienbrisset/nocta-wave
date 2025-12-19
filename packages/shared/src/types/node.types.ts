@@ -7,7 +7,8 @@ export type NodeCategory =
   | 'logic'
   | 'database'
   | 'integration'
-  | 'utility';
+  | 'utility'
+  | 'flow';
 
 export type InputType =
   | 'string'

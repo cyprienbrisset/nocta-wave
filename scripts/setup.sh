@@ -26,7 +26,7 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$ROOT_DIR"
 
 # Check requirements
-echo -e "${YELLOW}[1/6] Checking requirements...${NC}"
+echo -e "${YELLOW}[1/5] Checking requirements...${NC}"
 
 if ! command -v node &> /dev/null; then
     echo -e "${RED}✗ Node.js is not installed${NC}"
@@ -49,7 +49,7 @@ fi
 echo -e "${GREEN}  ✓ Docker $(docker -v | cut -d' ' -f3 | tr -d ',')${NC}"
 
 # Create .env file
-echo -e "${YELLOW}[2/6] Setting up environment...${NC}"
+echo -e "${YELLOW}[2/5] Setting up environment...${NC}"
 
 if [ ! -f ".env" ]; then
     cp .env.example .env
@@ -75,18 +75,15 @@ else
 fi
 
 # Install dependencies
-echo -e "${YELLOW}[3/6] Installing dependencies...${NC}"
+echo -e "${YELLOW}[3/5] Installing dependencies...${NC}"
 pnpm install
 echo -e "${GREEN}  ✓ Dependencies installed${NC}"
 
 # Start Docker
-echo -e "${YELLOW}[4/6] Starting Docker services...${NC}"
-docker compose -f docker/docker-compose.yml up -d
+echo -e "${YELLOW}[4/5] Starting Docker services (PostgreSQL, Redis)...${NC}"
+docker compose -f docker/docker-compose.yml up -d postgres redis
 
 # Wait for services
-echo -e "${YELLOW}[5/6] Waiting for services...${NC}"
-sleep 5
-
 echo -ne "  PostgreSQL: "
 until docker exec wsflows-postgres pg_isready -U postgres > /dev/null 2>&1; do
     echo -n "."
@@ -102,7 +99,7 @@ done
 echo -e " ${GREEN}ready${NC}"
 
 # Setup database
-echo -e "${YELLOW}[6/6] Setting up database...${NC}"
+echo -e "${YELLOW}[5/5] Setting up database...${NC}"
 # Copy .env to apps/api for Prisma to find it
 cp "$ROOT_DIR/.env" "$ROOT_DIR/apps/api/.env"
 cd "$ROOT_DIR/apps/api"
@@ -136,6 +133,15 @@ echo -e "${CYAN}║${NC}                    Default Credentials                 
 echo -e "${CYAN}╠═══════════════════════════════════════════════════════════╣${NC}"
 echo -e "${CYAN}║${NC}  ${YELLOW}Email${NC}:    admin@wsflows.local                           ${CYAN}║${NC}"
 echo -e "${CYAN}║${NC}  ${YELLOW}Password${NC}: admin123                                      ${CYAN}║${NC}"
+echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${CYAN}╔═══════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║${NC}                  Worker Configuration                      ${CYAN}║${NC}"
+echo -e "${CYAN}╠═══════════════════════════════════════════════════════════╣${NC}"
+echo -e "${CYAN}║${NC}  The internal workflow engine is enabled by default.      ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}  Configure via environment variables:                     ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}    WORKER_CONCURRENCY=10    (concurrent workers)          ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}    WORKER_BATCH_SIZE=5      (jobs per batch)              ${CYAN}║${NC}"
 echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo "To start the application:"

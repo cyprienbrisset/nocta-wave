@@ -175,6 +175,20 @@ export {
 } from './utility';
 
 // ============================================================================
+// FLOW NODES (3) - Sub-workflows
+// ============================================================================
+export {
+  subWorkflowNode,
+  subWorkflowInputNode,
+  subWorkflowOutputNode,
+  SubWorkflowSchema,
+  type SubWorkflowConfig,
+  type SubWorkflowInputParam,
+  type SubWorkflowOutputParam,
+  type SubWorkflowMetadata,
+} from './flow';
+
+// ============================================================================
 // ALL NODES
 // ============================================================================
 import { triggerNodes } from './triggers';
@@ -184,11 +198,21 @@ import { logicNodes } from './logic';
 import { databaseNodes } from './database';
 import { integrationNodes } from './integrations';
 import { utilityNodes } from './utility';
+import { subWorkflowNode, subWorkflowInputNode, subWorkflowOutputNode } from './flow';
 import { nodeRegistry } from './registry';
 import type { NodeDefinition } from '@ws-flows/shared';
 
 /**
- * All pre-built nodes (88 total)
+ * Flow nodes for sub-workflows
+ */
+export const flowNodes: NodeDefinition[] = [
+  subWorkflowNode,
+  subWorkflowInputNode,
+  subWorkflowOutputNode,
+];
+
+/**
+ * All pre-built nodes (91 total)
  */
 export const allNodes: NodeDefinition[] = [
   ...triggerNodes,
@@ -198,6 +222,7 @@ export const allNodes: NodeDefinition[] = [
   ...databaseNodes,
   ...integrationNodes,
   ...utilityNodes,
+  ...flowNodes,
 ];
 
 /**
@@ -220,6 +245,7 @@ export function getNodesByCategories(): Record<string, NodeDefinition[]> {
     database: databaseNodes,
     integration: integrationNodes,
     utility: utilityNodes,
+    flow: flowNodes,
   };
 }
 
@@ -234,6 +260,7 @@ export const NODE_COUNTS = {
   database: databaseNodes.length,
   integration: integrationNodes.length,
   utility: utilityNodes.length,
+  flow: flowNodes.length,
   total: allNodes.length,
 } as const;
 

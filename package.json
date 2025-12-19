@@ -6,7 +6,7 @@
   "author": "WS-Flows Team",
   "license": "MIT",
   "scripts": {
-    "dev": "turbo dev",
+    "dev": "turbo dev --filter=@ws-flows/api --filter=@ws-flows/web",
     "dev:api": "turbo dev --filter=@ws-flows/api",
     "dev:web": "turbo dev --filter=@ws-flows/web",
     "dev:worker": "turbo dev --filter=@ws-flows/worker",

@@ -8,6 +8,7 @@ export interface NodeMetadata {
   icon: string;
   version?: string;
   credentials?: string[];
+  defaults?: Record<string, unknown>;
 }
 
 export interface NodeDefinition extends NodeMetadata {
@@ -49,6 +50,7 @@ export interface NodeCounts {
   database: number;
   integration: number;
   utility: number;
+  flow: number;
   total: number;
 }
 

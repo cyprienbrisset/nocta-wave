@@ -18,6 +18,7 @@ import {
   Plus,
   PanelRightClose,
   PanelRight,
+  Workflow,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -34,6 +35,8 @@ interface LibraryPanelProps {
   onAddNode: (node: NodeMetadata) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  embedded?: boolean;
+  className?: string;
 }
 
 const categoryConfig: Record<string, { icon: ReactNode; label: string; color: string }> = {
@@ -72,9 +75,14 @@ const categoryConfig: Record<string, { icon: ReactNode; label: string; color: st
     label: 'Utilitaires',
     color: 'text-gray-500',
   },
+  flow: {
+    icon: <Workflow className="h-4 w-4" />,
+    label: 'Sub-Workflows',
+    color: 'text-indigo-500',
+  },
 };
 
-export function LibraryPanel({ onAddNode, isCollapsed = false, onToggleCollapse }: LibraryPanelProps) {
+export function LibraryPanel({ onAddNode, isCollapsed = false, onToggleCollapse, embedded = false, className }: LibraryPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['trigger']));
 
@@ -136,6 +144,88 @@ export function LibraryPanel({ onAddNode, isCollapsed = false, onToggleCollapse 
               </TooltipContent>
             </Tooltip>
           ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Embedded mode for panel layout - fills container
+  if (embedded) {
+    return (
+      <div className={cn('flex h-full flex-col bg-[#1a1a2e]', className)}>
+        {/* Search */}
+        <div className="p-2 border-b border-gray-800/50">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-500" />
+            <Input
+              className="h-7 pl-7 text-xs bg-gray-800/50 border-gray-700 text-white placeholder:text-gray-500"
+              placeholder="Rechercher..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Node list */}
+        <div className="flex-1 overflow-auto px-2 pb-2">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          ) : displayNodes ? (
+            <div className="space-y-1">
+              {displayNodes.length > 0 ? (
+                displayNodes.map((node) => (
+                  <NodeItem key={node.type} node={node} onAdd={onAddNode} compact />
+                ))
+              ) : (
+                <p className="py-4 text-center text-xs text-gray-500">
+                  Aucun node trouvé
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-0.5">
+              {categories?.map((category) => {
+                const config = categoryConfig[category.category] || {
+                  icon: <Code className="h-4 w-4" />,
+                  label: category.category,
+                  color: 'text-gray-500',
+                };
+                const isExpanded = expandedCategories.has(category.category);
+
+                return (
+                  <div key={category.category}>
+                    <button
+                      className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors hover:bg-gray-800 text-gray-300"
+                      onClick={() => toggleCategory(category.category)}
+                    >
+                      {isExpanded ? (
+                        <ChevronDown className="h-3 w-3 text-gray-500 flex-shrink-0" />
+                      ) : (
+                        <ChevronRight className="h-3 w-3 text-gray-500 flex-shrink-0" />
+                      )}
+                      <span className={cn('flex items-center', config.color)}>
+                        {config.icon}
+                      </span>
+                      <span className="flex-1 font-medium truncate">{config.label}</span>
+                      <span className="rounded-full bg-gray-800 px-1.5 py-0.5 text-[10px] text-gray-500">
+                        {category.count}
+                      </span>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="ml-4 mt-0.5 space-y-0.5 border-l border-gray-700 pl-2">
+                        {category.nodes.map((node) => (
+                          <NodeItem key={node.type} node={node} onAdd={onAddNode} compact />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -291,7 +381,8 @@ function NodeItem({ node, onAdd, compact }: NodeItemProps) {
           category === 'logic' && 'bg-orange-900/50 text-orange-500',
           category === 'database' && 'bg-cyan-900/50 text-cyan-500',
           category === 'integration' && 'bg-pink-900/50 text-pink-500',
-          category === 'utility' && 'bg-gray-800 text-gray-500'
+          category === 'utility' && 'bg-gray-800 text-gray-500',
+          category === 'flow' && 'bg-indigo-900/50 text-indigo-500'
         )}
       >
         {config.icon}

@@ -90,4 +90,30 @@ export class RedisService implements OnModuleDestroy {
   async llen(key: string): Promise<number> {
     return this.client.llen(key);
   }
+
+  async rpush(key: string, value: string): Promise<void> {
+    await this.client.rpush(key, value);
+  }
+
+  async lrange(key: string, start: number, stop: number): Promise<string[]> {
+    return this.client.lrange(key, start, stop);
+  }
+
+  async setex(key: string, seconds: number, value: string): Promise<void> {
+    await this.client.setex(key, seconds, value);
+  }
+
+  async keys(pattern: string): Promise<string[]> {
+    return this.client.keys(pattern);
+  }
+
+  async delMultiple(...keys: string[]): Promise<void> {
+    if (keys.length > 0) {
+      await this.client.del(...keys);
+    }
+  }
+
+  duplicate(): Redis {
+    return this.client.duplicate();
+  }
 }

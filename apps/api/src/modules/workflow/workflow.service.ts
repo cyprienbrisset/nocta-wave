@@ -2,9 +2,12 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { TeamService } from '../team/team.service';
+import { BranchService } from '../branch/branch.service';
 import { WorkflowStatus } from '@prisma/client';
 import {
   CreateWorkflowDto,
@@ -17,6 +20,8 @@ export class WorkflowService {
   constructor(
     private prisma: PrismaService,
     private teamService: TeamService,
+    @Inject(forwardRef(() => BranchService))
+    private branchService: BranchService,
   ) {}
 
   async create(userId: string, teamId: string, dto: CreateWorkflowDto) {
@@ -27,16 +32,33 @@ export class WorkflowService {
       'MEMBER',
     ]);
 
-    return this.prisma.workflow.create({
+    const graph = dto.graph || { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } };
+
+    const workflow = await this.prisma.workflow.create({
       data: {
         name: dto.name,
         description: dto.description,
         teamId,
         createdById: userId,
-        graph: dto.graph || { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } },
+        graph,
         settings: dto.settings,
       },
     });
+
+    // Create main branch for the workflow
+    try {
+      await this.branchService.createMainBranch(
+        workflow.id,
+        userId,
+        graph,
+        dto.settings,
+      );
+    } catch (error) {
+      // If branch creation fails, don't fail the workflow creation
+      console.error('Failed to create main branch:', error);
+    }
+
+    return workflow;
   }
 
   async findById(id: string, userId?: string) {

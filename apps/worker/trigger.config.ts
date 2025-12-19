@@ -4,6 +4,8 @@ export default defineConfig({
   project: 'ws-flows-worker',
   runtime: 'node',
   logLevel: 'info',
+  // Connect to self-hosted Trigger.dev instance
+  triggerUrl: process.env.TRIGGER_API_URL || 'http://localhost:4002',
   retries: {
     enabledInDev: true,
     default: {

@@ -18,7 +18,7 @@ echo "╔═══════════════════════�
 echo "║                     WS-Flows Starter                      ║"
 echo "║            Workflow Automation Platform                   ║"
 echo "║                                                           ║"
-echo "║          Services: API • Web • PostgreSQL • Redis         ║"
+echo "║         Services: API • Web • PostgreSQL • Redis          ║"
 echo "╚═══════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
@@ -30,7 +30,7 @@ cd "$ROOT_DIR"
 
 # Check for required tools
 check_requirements() {
-    echo -e "${YELLOW}[1/6] Checking requirements...${NC}"
+    echo -e "${YELLOW}[1/5] Checking requirements...${NC}"
 
     if ! command -v node &> /dev/null; then
         echo -e "${RED}Error: Node.js is not installed${NC}"
@@ -60,7 +60,7 @@ check_requirements() {
 
 # Setup environment file
 setup_env() {
-    echo -e "${YELLOW}[2/6] Setting up environment...${NC}"
+    echo -e "${YELLOW}[2/5] Setting up environment...${NC}"
 
     if [ ! -f ".env" ]; then
         echo -e "  Creating .env file with secure secrets..."
@@ -94,7 +94,7 @@ setup_env() {
 
 # Install dependencies
 install_deps() {
-    echo -e "${YELLOW}[3/6] Installing dependencies...${NC}"
+    echo -e "${YELLOW}[3/5] Installing dependencies...${NC}"
     pnpm install
     echo -e "${GREEN}✓ Dependencies installed${NC}"
     echo ""
@@ -102,10 +102,10 @@ install_deps() {
 
 # Start Docker services
 start_docker() {
-    echo -e "${YELLOW}[4/6] Starting Docker services...${NC}"
+    echo -e "${YELLOW}[4/5] Starting Docker services...${NC}"
 
     echo -e "  Starting PostgreSQL and Redis..."
-    docker compose -f docker/docker-compose.yml up -d
+    docker compose -f docker/docker-compose.yml up -d postgres redis
 
     # Wait for services to be ready
     echo -e "  Waiting for services to be ready..."
@@ -132,7 +132,7 @@ start_docker() {
 
 # Setup database
 setup_database() {
-    echo -e "${YELLOW}[5/6] Setting up database...${NC}"
+    echo -e "${YELLOW}[5/5] Setting up database...${NC}"
 
     # Copy .env to apps/api for Prisma to find it
     cp "$ROOT_DIR/.env" "$ROOT_DIR/apps/api/.env"
@@ -158,8 +158,6 @@ setup_database() {
 
 # Start all services
 start_services() {
-    echo -e "${YELLOW}[6/6] Starting application services...${NC}"
-    echo ""
     echo -e "${CYAN}╔═══════════════════════════════════════════════════════════╗${NC}"
     echo -e "${CYAN}║                    Services URLs                          ║${NC}"
     echo -e "${CYAN}╠═══════════════════════════════════════════════════════════╣${NC}"
@@ -171,14 +169,21 @@ start_services() {
     echo -e "${CYAN}╠═══════════════════════════════════════════════════════════╣${NC}"
     echo -e "${CYAN}║${NC}  ${YELLOW}Email${NC}:    admin@wsflows.local                           ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  ${YELLOW}Password${NC}: admin123                                      ${CYAN}║${NC}"
+    echo -e "${CYAN}╠═══════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${CYAN}║${NC}                  Worker Configuration                      ${CYAN}║${NC}"
+    echo -e "${CYAN}╠═══════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${CYAN}║${NC}  Internal workflow engine: ${GREEN}enabled${NC}                       ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  Concurrent workers: ${GREEN}10${NC} (WORKER_CONCURRENCY)             ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  Batch size: ${GREEN}5${NC} (WORKER_BATCH_SIZE)                       ${CYAN}║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "${YELLOW}Note:${NC} Change the admin password after first login!"
     echo ""
-    echo -e "${GREEN}Starting development servers...${NC}"
+    echo -e "${GREEN}Starting development servers (API + Web)...${NC}"
+    echo -e "${BLUE}The internal workflow worker is integrated in the API server.${NC}"
     echo ""
 
-    # Start in development mode
+    # Start all services (API, Web) - worker is integrated in API
     pnpm dev
 }
 
@@ -197,7 +202,7 @@ cleanup() {
     echo ""
     echo -e "${YELLOW}Shutting down services...${NC}"
     cd "$ROOT_DIR"
-    docker compose -f docker/docker-compose.yml down
+    docker compose -f docker/docker-compose.yml stop postgres redis
     echo -e "${GREEN}✓ Cleanup complete${NC}"
 }
 

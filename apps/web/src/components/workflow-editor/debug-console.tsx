@@ -17,17 +17,27 @@ import {
   Search,
   Filter,
   Download,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface DebugConsoleProps {
-  isOpen: boolean;
+  isOpen?: boolean;
   onClose?: () => void;
   onToggle?: () => void;
   onNodeClick?: (nodeId: string) => void;
+  embedded?: boolean; // New: for embedding in panel layout
+  className?: string;
 }
 
-export function DebugConsole({ isOpen, onClose, onToggle, onNodeClick }: DebugConsoleProps) {
+export function DebugConsole({
+  isOpen = true,
+  onClose,
+  onToggle,
+  onNodeClick,
+  embedded = false,
+  className,
+}: DebugConsoleProps) {
   const handleToggle = onToggle || onClose || (() => {});
   const { consoleLogs, clearConsoleLogs, nodes } = useWorkflowStore();
   const [filter, setFilter] = useState('');
@@ -116,10 +126,133 @@ export function DebugConsole({ isOpen, onClose, onToggle, onNodeClick }: DebugCo
     );
   };
 
-  if (!isOpen) {
+  if (!isOpen && !embedded) {
     return null;
   }
 
+  // Embedded mode for panel layout - no fixed positioning
+  if (embedded) {
+    return (
+      <div className={cn('flex h-full flex-col bg-[#0f0f1a]', className)}>
+        {/* Toolbar */}
+        <div className="flex items-center justify-between border-b border-gray-800/50 bg-[#1a1a2e]/50 px-2 py-1.5">
+          <div className="flex items-center gap-2">
+            {/* Level filters */}
+            {['info', 'warn', 'error', 'debug'].map((level) => (
+              <button
+                key={level}
+                onClick={() => toggleLevel(level)}
+                className={cn(
+                  'flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors',
+                  levelFilter.includes(level)
+                    ? 'bg-gray-700 text-white'
+                    : 'text-gray-500 hover:text-gray-300'
+                )}
+              >
+                {getLevelIcon(level)}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-500" />
+              <Input
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="Filter..."
+                className="h-6 w-28 bg-gray-800 border-gray-700 pl-7 text-[10px]"
+              />
+            </div>
+
+            {/* Actions */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={exportLogs}
+              className="h-6 w-6 text-gray-400 hover:text-white"
+              title="Export logs"
+            >
+              <Download className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={clearConsoleLogs}
+              className="h-6 w-6 text-gray-400 hover:text-white"
+              title="Clear console"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Log entries */}
+        <div className="flex-1 overflow-auto font-mono text-xs" ref={scrollRef}>
+          <div className="p-2">
+            {filteredLogs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-gray-500">
+                <Terminal className="mr-2 h-5 w-5 mb-2" />
+                <p className="text-xs">Aucun log à afficher</p>
+                <p className="text-[10px] mt-1 text-gray-600">
+                  Lancez une exécution depuis le panneau "Test" pour voir les logs
+                </p>
+              </div>
+            ) : (
+              filteredLogs.map((log) => (
+                <div
+                  key={log.id}
+                  className={cn(
+                    'flex items-start gap-2 rounded px-2 py-1 hover:bg-gray-800/50',
+                    log.level === 'error' && 'bg-red-900/10'
+                  )}
+                >
+                  {/* Timestamp */}
+                  <span className="shrink-0 text-gray-600 text-[10px]">
+                    {formatTimestamp(log.timestamp)}
+                  </span>
+
+                  {/* Level icon */}
+                  <span className="shrink-0 mt-0.5">{getLevelIcon(log.level)}</span>
+
+                  {/* Node reference */}
+                  {log.nodeId && (
+                    <button
+                      onClick={() => onNodeClick?.(log.nodeId!)}
+                      className="shrink-0 rounded bg-gray-800 px-1.5 py-0.5 text-[10px] font-medium text-primary hover:bg-gray-700"
+                    >
+                      {getNodeName(log.nodeId)}
+                    </button>
+                  )}
+
+                  {/* Message */}
+                  <span className={cn('flex-1 text-[11px]', getLevelColor(log.level))}>
+                    {log.message}
+                  </span>
+
+                  {/* Data preview */}
+                  {log.data && (
+                    <details className="group">
+                      <summary className="cursor-pointer text-gray-500 hover:text-gray-300 text-[10px]">
+                        <span className="group-open:hidden">+</span>
+                        <span className="hidden group-open:inline">−</span>
+                      </summary>
+                      <pre className="mt-1 rounded bg-gray-900 p-2 text-[10px] text-gray-300 overflow-auto max-h-32">
+                        {JSON.stringify(log.data, null, 2)}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Original fixed positioning mode
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-700 bg-[#0f0f1a] shadow-2xl">
       {/* Header */}

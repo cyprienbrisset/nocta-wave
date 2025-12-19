@@ -6,14 +6,17 @@
 #   docker compose -f docker/docker-compose.yml up -d
 #
 # Services:
-#   - PostgreSQL: localhost:5434 (user: postgres, password: postgres)
-#   - Redis: localhost:6380 (password: redis)
+#   - PostgreSQL (WS-Flows): localhost:5434
+#   - PostgreSQL (Trigger.dev): localhost:5435
+#   - Redis: localhost:6380
+#   - Trigger.dev: localhost:4002
+#   - Trigger.dev Coordinator: localhost:4003
 #
 # =============================================================================
 
 services:
   # ---------------------------------------------------------------------------
-  # PostgreSQL Database
+  # PostgreSQL Database (WS-Flows)
   # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
@@ -51,8 +54,123 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes
 
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database (Trigger.dev)
+  # ---------------------------------------------------------------------------
+  trigger-postgres:
+    image: postgres:16-alpine
+    container_name: wsflows-trigger-postgres
+    environment:
+      POSTGRES_USER: trigger
+      POSTGRES_PASSWORD: ${TRIGGER_DB_PASSWORD:-trigger}
+      POSTGRES_DB: trigger
+    ports:
+      - '5435:5432'
+    volumes:
+      - trigger_postgres_data:/var/lib/postgresql/data
+    command: postgres -c wal_level=logical
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U trigger']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Electric SQL (Real-time sync for Trigger.dev)
+  # ---------------------------------------------------------------------------
+  trigger-electric:
+    image: electricsql/electric:latest
+    container_name: wsflows-trigger-electric
+    environment:
+      DATABASE_URL: postgresql://trigger:${TRIGGER_DB_PASSWORD:-trigger}@trigger-postgres:5432/trigger
+      ELECTRIC_INSECURE: "true"
+    depends_on:
+      trigger-postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Trigger.dev Self-Hosted (v3)
+  # ---------------------------------------------------------------------------
+  trigger:
+    image: ghcr.io/triggerdotdev/trigger.dev:v3
+    container_name: wsflows-trigger
+    ports:
+      - '4002:3000'
+    environment:
+      # Database
+      DATABASE_URL: postgresql://trigger:${TRIGGER_DB_PASSWORD:-trigger}@trigger-postgres:5432/trigger
+      DIRECT_URL: postgresql://trigger:${TRIGGER_DB_PASSWORD:-trigger}@trigger-postgres:5432/trigger
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_TLS_DISABLED: "true"
+      # Electric (for real-time sync)
+      ELECTRIC_ORIGIN: http://trigger-electric:3000
+      # App URLs
+      LOGIN_ORIGIN: http://localhost:4002
+      APP_ORIGIN: http://localhost:4002
+      # Auth
+      MAGIC_LINK_SECRET: ${TRIGGER_MAGIC_LINK_SECRET:-wsflows-magic-link-secret-change-me-32}
+      SESSION_SECRET: ${TRIGGER_SESSION_SECRET:-wsflows-session-secret-change-me-32ch}
+      ENCRYPTION_KEY: ${TRIGGER_ENCRYPTION_KEY:-wsflows-encryption-key-change-me-32ch}
+      # Misc
+      NODE_ENV: development
+      AUTH_GITHUB_CLIENT_ID: ""
+      AUTH_GITHUB_CLIENT_SECRET: ""
+      RUNTIME_PLATFORM: docker-compose
+      # Coordinator
+      COORDINATOR_HOST: trigger-coordinator
+      COORDINATOR_PORT: 9020
+    depends_on:
+      trigger-postgres:
+        condition: service_healthy
+      trigger-electric:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Trigger.dev Coordinator (manages workers)
+  # ---------------------------------------------------------------------------
+  trigger-coordinator:
+    image: ghcr.io/triggerdotdev/coordinator:v3
+    container_name: wsflows-trigger-coordinator
+    ports:
+      - '4003:9020'
+    environment:
+      COORDINATOR_PORT: 9020
+      COORDINATOR_SECRET: ${TRIGGER_WORKER_SECRET:-change-me-worker-secret}
+      PLATFORM_HOST: trigger
+      PLATFORM_WS_PORT: 3000
+      PLATFORM_SECRET: ${TRIGGER_WORKER_SECRET:-change-me-worker-secret}
+    depends_on:
+      - trigger
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Trigger.dev Docker Provider (runs tasks in containers)
+  # ---------------------------------------------------------------------------
+  trigger-provider:
+    image: ghcr.io/triggerdotdev/provider/docker:v3
+    container_name: wsflows-trigger-provider
+    environment:
+      COORDINATOR_HOST: trigger-coordinator
+      COORDINATOR_PORT: 9020
+      COORDINATOR_SECRET: ${TRIGGER_WORKER_SECRET:-change-me-worker-secret}
+      PLATFORM_SECRET: ${TRIGGER_WORKER_SECRET:-change-me-worker-secret}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - trigger-coordinator
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  trigger_postgres_data:
     driver: local
