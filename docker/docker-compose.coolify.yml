@@ -85,7 +85,8 @@ services:
   # ---------------------------------------------------------------------------
   api:
     build:
-      context: ..
+      # Coolify uses --project-directory pointing to repo root, so context is "."
+      context: .
       dockerfile: docker/Dockerfile.api
     environment:
       NODE_ENV: production
@@ -127,7 +128,8 @@ services:
   # ---------------------------------------------------------------------------
   web:
     build:
-      context: ..
+      # Coolify uses --project-directory pointing to repo root, so context is "."
+      context: .
       dockerfile: docker/Dockerfile.web
       args:
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://api:3001/api}
