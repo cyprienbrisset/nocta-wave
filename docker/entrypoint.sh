@@ -16,9 +16,12 @@ ls -la dist/main.js 2>/dev/null && echo "OK: dist/main.js exists" || ls -la dist
 ls -la prisma/schema.prisma 2>/dev/null && echo "OK: prisma/schema.prisma exists" || echo "WARNING: prisma/schema.prisma not found"
 echo ""
 
+# Use specific Prisma version to avoid breaking changes from Prisma 7.x
+PRISMA_CMD="npx prisma@5.22.0"
+
 # Check Prisma version
 echo "Prisma version:"
-npx prisma --version 2>&1 || echo "Could not get Prisma version"
+$PRISMA_CMD --version 2>&1 || echo "Could not get Prisma version"
 echo ""
 
 # Debug: try to resolve postgres hostname
@@ -38,7 +41,7 @@ while [ $attempt -le $max_attempts ]; do
   echo "=== Attempt $attempt/$max_attempts ==="
 
   # Try to run prisma migrate deploy
-  output=$(npx prisma migrate deploy 2>&1)
+  output=$($PRISMA_CMD migrate deploy 2>&1)
   exit_code=$?
 
   echo "$output"

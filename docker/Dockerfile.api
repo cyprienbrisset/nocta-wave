@@ -82,8 +82,9 @@ RUN rm -rf /app/deploy/node_modules/@ws-flows/shared \
     && cp -r packages/nodes/dist /app/deploy/node_modules/@ws-flows/nodes/ \
     && cp packages/nodes/package.json /app/deploy/node_modules/@ws-flows/nodes/
 
-# Generate Prisma client in deploy folder
-RUN cd /app/deploy && npx prisma generate
+# Generate Prisma client in deploy folder using the exact version (5.22.0)
+# to avoid breaking changes from Prisma 7.x
+RUN cd /app/deploy && npx prisma@5.22.0 generate
 
 # -----------------------------------------------------------------------------
 # Stage 3: Production Runner
