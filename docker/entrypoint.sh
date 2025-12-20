@@ -12,15 +12,13 @@ echo ""
 
 # Debug: check files
 echo "Checking required files..."
-ls -la dist/main.js 2>/dev/null && echo "OK: dist/main.js exists" || { echo "ERROR: dist/main.js not found!"; exit 1; }
+ls -la dist/main.js 2>/dev/null && echo "OK: dist/main.js exists" || ls -la dist/src/main.js 2>/dev/null && echo "OK: dist/src/main.js exists" || { echo "ERROR: main.js not found!"; exit 1; }
 ls -la prisma/schema.prisma 2>/dev/null && echo "OK: prisma/schema.prisma exists" || echo "WARNING: prisma/schema.prisma not found"
-ls -la node_modules/.prisma/client/index.js 2>/dev/null && echo "OK: Prisma client exists" || echo "WARNING: Prisma client may be missing"
-ls -la node_modules/.bin/prisma 2>/dev/null && echo "OK: Prisma CLI exists" || echo "WARNING: Prisma CLI not found"
 echo ""
 
 # Check Prisma version
 echo "Prisma version:"
-./node_modules/.bin/prisma --version 2>&1 || echo "Could not get Prisma version"
+npx prisma --version 2>&1 || echo "Could not get Prisma version"
 echo ""
 
 # Debug: try to resolve postgres hostname
@@ -39,8 +37,8 @@ while [ $attempt -le $max_attempts ]; do
   echo ""
   echo "=== Attempt $attempt/$max_attempts ==="
 
-  # Try to run prisma migrate deploy using local version
-  output=$(./node_modules/.bin/prisma migrate deploy 2>&1)
+  # Try to run prisma migrate deploy
+  output=$(npx prisma migrate deploy 2>&1)
   exit_code=$?
 
   echo "$output"
@@ -72,8 +70,10 @@ echo ""
 echo "Running database seed..."
 if [ -f "prisma/dist/seed.js" ]; then
   node prisma/dist/seed.js && echo "Seed completed!" || echo "Seed skipped (already applied or error)"
+elif [ -f "dist/prisma/seed.js" ]; then
+  node dist/prisma/seed.js && echo "Seed completed!" || echo "Seed skipped (already applied or error)"
 else
-  echo "Seed script not found at prisma/dist/seed.js, skipping..."
+  echo "Seed script not found, skipping..."
 fi
 
 echo ""
@@ -81,5 +81,12 @@ echo "=========================================="
 echo "Starting API server on port ${PORT:-3001}..."
 echo "=========================================="
 
-# Start the application (this replaces the shell process)
-exec node dist/main.js
+# Start the application - check both possible locations
+if [ -f "dist/main.js" ]; then
+  exec node dist/main.js
+elif [ -f "dist/src/main.js" ]; then
+  exec node dist/src/main.js
+else
+  echo "ERROR: Cannot find main.js!"
+  exit 1
+fi
