@@ -9,6 +9,15 @@ import {
   type NodeChange,
   type EdgeChange,
 } from '@xyflow/react';
+import type {
+  MappingState,
+  FieldMapping,
+  FieldSchema,
+  NodeDataSchema,
+  MappingSuggestion,
+  MappingDragState,
+} from '@/types/mapping.types';
+import { initialMappingState } from '@/types/mapping.types';
 
 // History entry for undo/redo
 interface HistoryEntry {
@@ -96,6 +105,9 @@ interface WorkflowState {
     data?: any;
   }>;
 
+  // Data mapping state
+  mapping: MappingState;
+
   // Actions
   setNodes: (nodes: WorkflowNode[]) => void;
   setEdges: (edges: Edge[]) => void;
@@ -147,6 +159,19 @@ interface WorkflowState {
   // Console
   addConsoleLog: (log: Omit<WorkflowState['consoleLogs'][0], 'id' | 'timestamp'>) => void;
   clearConsoleLogs: () => void;
+
+  // Data Mapping
+  openMappingModal: (edgeId: string) => void;
+  closeMappingModal: () => void;
+  addFieldMapping: (edgeId: string, mapping: Omit<FieldMapping, 'id' | 'createdAt'>) => void;
+  updateFieldMapping: (edgeId: string, mappingId: string, updates: Partial<FieldMapping>) => void;
+  removeFieldMapping: (edgeId: string, mappingId: string) => void;
+  setNodeSchema: (nodeId: string, schema: NodeDataSchema) => void;
+  setMappingDragState: (state: Partial<MappingDragState>) => void;
+  setExpressionMode: (mode: 'simple' | 'advanced') => void;
+  setActiveMappingId: (mappingId: string | null) => void;
+  setSuggestions: (suggestions: MappingSuggestion[]) => void;
+  getEdgeMappings: (edgeId: string) => FieldMapping[];
 }
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
@@ -170,6 +195,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     nodeData: {},
   },
   consoleLogs: [],
+  mapping: initialMappingState,
 
   setNodes: (nodes) => {
     get().pushHistory('Set nodes');
@@ -720,5 +746,178 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   clearConsoleLogs: () => {
     set({ consoleLogs: [] });
+  },
+
+  // Data Mapping implementation
+  openMappingModal: (edgeId) => {
+    set({
+      mapping: {
+        ...get().mapping,
+        mappingModalEdgeId: edgeId,
+        activeMappingId: null,
+        suggestions: [],
+      },
+    });
+  },
+
+  closeMappingModal: () => {
+    set({
+      mapping: {
+        ...get().mapping,
+        mappingModalEdgeId: null,
+        activeMappingId: null,
+        dragState: initialMappingState.dragState,
+      },
+    });
+  },
+
+  addFieldMapping: (edgeId, mapping) => {
+    const edges = get().edges;
+    const edgeIndex = edges.findIndex((e) => e.id === edgeId);
+    if (edgeIndex === -1) return;
+
+    const newMapping: FieldMapping = {
+      ...mapping,
+      id: `mapping-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      createdAt: Date.now(),
+    };
+
+    const edge = edges[edgeIndex];
+    const existingMappings = (edge as any).mappings || [];
+
+    const updatedEdge: Edge = {
+      ...edge,
+      mappings: [...existingMappings, newMapping],
+      mappingMeta: {
+        lastEditedAt: Date.now(),
+        mappingMode: 'visual' as const,
+      },
+    } as Edge;
+
+    get().pushHistory('Add field mapping');
+    set({
+      edges: [
+        ...edges.slice(0, edgeIndex),
+        updatedEdge,
+        ...edges.slice(edgeIndex + 1),
+      ],
+      isDirty: true,
+    });
+  },
+
+  updateFieldMapping: (edgeId, mappingId, updates) => {
+    const edges = get().edges;
+    const edgeIndex = edges.findIndex((e) => e.id === edgeId);
+    if (edgeIndex === -1) return;
+
+    const edge = edges[edgeIndex];
+    const existingMappings: FieldMapping[] = (edge as any).mappings || [];
+
+    const updatedMappings = existingMappings.map((m) =>
+      m.id === mappingId ? { ...m, ...updates } : m
+    );
+
+    const updatedEdge: Edge = {
+      ...edge,
+      mappings: updatedMappings,
+      mappingMeta: {
+        lastEditedAt: Date.now(),
+        mappingMode: 'visual' as const,
+      },
+    } as Edge;
+
+    set({
+      edges: [
+        ...edges.slice(0, edgeIndex),
+        updatedEdge,
+        ...edges.slice(edgeIndex + 1),
+      ],
+      isDirty: true,
+    });
+  },
+
+  removeFieldMapping: (edgeId, mappingId) => {
+    const edges = get().edges;
+    const edgeIndex = edges.findIndex((e) => e.id === edgeId);
+    if (edgeIndex === -1) return;
+
+    const edge = edges[edgeIndex];
+    const existingMappings: FieldMapping[] = (edge as any).mappings || [];
+
+    const updatedEdge: Edge = {
+      ...edge,
+      mappings: existingMappings.filter((m) => m.id !== mappingId),
+      mappingMeta: {
+        lastEditedAt: Date.now(),
+        mappingMode: 'visual' as const,
+      },
+    } as Edge;
+
+    get().pushHistory('Remove field mapping');
+    set({
+      edges: [
+        ...edges.slice(0, edgeIndex),
+        updatedEdge,
+        ...edges.slice(edgeIndex + 1),
+      ],
+      isDirty: true,
+    });
+  },
+
+  setNodeSchema: (nodeId, schema) => {
+    set({
+      mapping: {
+        ...get().mapping,
+        schemas: {
+          ...get().mapping.schemas,
+          [nodeId]: schema,
+        },
+      },
+    });
+  },
+
+  setMappingDragState: (state) => {
+    set({
+      mapping: {
+        ...get().mapping,
+        dragState: {
+          ...get().mapping.dragState,
+          ...state,
+        },
+      },
+    });
+  },
+
+  setExpressionMode: (mode) => {
+    set({
+      mapping: {
+        ...get().mapping,
+        expressionMode: mode,
+      },
+    });
+  },
+
+  setActiveMappingId: (mappingId) => {
+    set({
+      mapping: {
+        ...get().mapping,
+        activeMappingId: mappingId,
+      },
+    });
+  },
+
+  setSuggestions: (suggestions) => {
+    set({
+      mapping: {
+        ...get().mapping,
+        suggestions,
+      },
+    });
+  },
+
+  getEdgeMappings: (edgeId) => {
+    const edge = get().edges.find((e) => e.id === edgeId);
+    if (!edge) return [];
+    return (edge as any).mappings || [];
   },
 }));

@@ -48,6 +48,25 @@ export interface WorkflowEdge {
   label?: string;
   type?: 'default' | 'conditional';
   condition?: string;
+  // Field-level data mappings
+  mappings?: EdgeFieldMapping[];
+  mappingMeta?: EdgeMappingMeta;
+}
+
+// Field mapping for visual data mapping between nodes
+export interface EdgeFieldMapping {
+  id: string;
+  sourcePath: string;     // "output.data.email"
+  targetPath: string;     // "config.recipient"
+  expression?: string;    // "{{value | lowercase}}" or JS code
+  expressionMode: 'simple' | 'advanced';
+  createdAt: number;
+}
+
+// Metadata about edge mappings
+export interface EdgeMappingMeta {
+  lastEditedAt: number;
+  mappingMode: 'visual' | 'expression' | 'mixed';
 }
 
 export interface WorkflowSettings {

@@ -16,7 +16,7 @@ import {
   type NodeMouseHandler,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Save, Play, ArrowLeft, Variable, Workflow, Clock, Bug, Rocket, CheckCircle2, Terminal, Eye, PanelRight, PanelRightClose, BookOpen, X, GitBranch } from 'lucide-react';
+import { Save, Play, ArrowLeft, Variable, Workflow, Clock, Bug, Rocket, CheckCircle2, Terminal, Eye, PanelRight, PanelRightClose, BookOpen, X, GitBranch, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { workflowsApi, WorkflowGraph } from '@/lib/api/workflows';
@@ -38,6 +38,8 @@ import { NodeGroupOverlay } from '@/components/workflow-editor/node-group';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { BranchPanel } from '@/components/branches/branch-panel';
 import { branchesApi } from '@/lib/api/branches';
+import { DataMappingModal } from '@/components/workflow-editor/data-mapping';
+import { ExecutionReplayPanel } from '@/components/workflow-editor/execution-replay';
 import Link from 'next/link';
 
 // Panel layout persistence
@@ -49,6 +51,7 @@ interface PanelLayout {
   showInspector: boolean;
   showLibrary: boolean;
   showBranches: boolean;
+  showReplay: boolean;
   activeBottomTab: 'console' | 'execution';
 }
 
@@ -58,6 +61,7 @@ const defaultLayout: PanelLayout = {
   showInspector: false,
   showLibrary: true,
   showBranches: false,
+  showReplay: false,
   activeBottomTab: 'console',
 };
 
@@ -107,6 +111,7 @@ function WorkflowEditorContent() {
   const [layout, setLayout] = useState<PanelLayout>(defaultLayout);
   const [showMinimap, setShowMinimap] = useState(true);
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
+  const [replayExecutionId, setReplayExecutionId] = useState<string | null>(null);
 
   // Load layout on mount
   useEffect(() => {
@@ -142,11 +147,27 @@ function WorkflowEditorContent() {
     duplicateSelectedNodes,
     deleteSelectedNodes,
     selectNodes,
+    openMappingModal,
+    mapping,
   } = useWorkflowStore();
 
   const { data: workflow, isLoading } = useQuery({
     queryKey: ['workflow', workflowId],
     queryFn: () => workflowsApi.get(workflowId),
+  });
+
+  // Query pour les exécutions récentes (pour le replay)
+  const { data: recentExecutions } = useQuery({
+    queryKey: ['executions', workflowId, 'recent'],
+    queryFn: () => executionsApi.listByWorkflow(workflowId, { take: 10 }),
+    enabled: layout.showReplay,
+  });
+
+  // Query pour l'exécution sélectionnée pour le replay
+  const { data: replayExecution } = useQuery({
+    queryKey: ['execution', replayExecutionId],
+    queryFn: () => executionsApi.get(replayExecutionId!),
+    enabled: !!replayExecutionId && layout.showReplay,
   });
 
   // Charger le graphe du workflow
@@ -159,6 +180,13 @@ function WorkflowEditorContent() {
     }
     return () => resetWorkflow();
   }, [workflow, setNodes, setEdges, setIsDirty, resetWorkflow]);
+
+  // Auto-sélectionner la dernière exécution quand le replay s'ouvre
+  useEffect(() => {
+    if (layout.showReplay && recentExecutions?.data && recentExecutions.data.length > 0 && !replayExecutionId) {
+      setReplayExecutionId(recentExecutions.data[0]!.id);
+    }
+  }, [layout.showReplay, recentExecutions, replayExecutionId]);
 
   // Mutation pour sauvegarder le workflow principal (quand pas sur une branche)
   const saveWorkflowMutation = useMutation({
@@ -304,6 +332,11 @@ function WorkflowEditorContent() {
     setIsNodeEditModalOpen(true);
   }, []);
 
+  const handleEdgeDoubleClick = useCallback((_event: React.MouseEvent, edge: any) => {
+    // Open the data mapping modal for this edge
+    openMappingModal(edge.id);
+  }, [openMappingModal]);
+
   const handlePaneClick = useCallback(() => {
     selectNode(null);
   }, [selectNode]);
@@ -395,7 +428,7 @@ function WorkflowEditorContent() {
   }, [handleInspectNode]);
 
   // Toggle panel functions with persistence
-  const togglePanel = useCallback((panel: keyof Pick<PanelLayout, 'showConsole' | 'showExecution' | 'showInspector' | 'showLibrary' | 'showBranches'>) => {
+  const togglePanel = useCallback((panel: keyof Pick<PanelLayout, 'showConsole' | 'showExecution' | 'showInspector' | 'showLibrary' | 'showBranches' | 'showReplay'>) => {
     setLayout(prev => {
       const newLayout = { ...prev, [panel]: !prev[panel] };
 
@@ -408,6 +441,11 @@ function WorkflowEditorContent() {
         newLayout.activeBottomTab = 'execution';
       } else if (panel === 'showExecution' && !newLayout.showExecution && newLayout.showConsole) {
         newLayout.activeBottomTab = 'console';
+      }
+
+      // Reset replay execution when closing replay panel
+      if (panel === 'showReplay' && !newLayout.showReplay) {
+        setReplayExecutionId(null);
       }
 
       saveLayout(newLayout);
@@ -551,6 +589,18 @@ function WorkflowEditorContent() {
           >
             <Bug className="mr-1.5 h-3.5 w-3.5" />
             Test
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => togglePanel('showReplay')}
+            className={cn(
+              "h-8 rounded-lg text-xs border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-700 hover:text-white",
+              layout.showReplay && "bg-purple-900/50 border-purple-500/50 text-purple-400"
+            )}
+          >
+            <History className="mr-1.5 h-3.5 w-3.5" />
+            Replay
           </Button>
           <Button
             variant="outline"
@@ -718,6 +768,7 @@ function WorkflowEditorContent() {
                   onConnect={onConnect}
                   onNodeClick={handleNodeClick}
                   onNodeDoubleClick={handleNodeDoubleClick}
+                  onEdgeDoubleClick={handleEdgeDoubleClick}
                   onNodeContextMenu={handleNodeContextMenu}
                   onPaneClick={handlePaneClick}
                   nodeTypes={nodeTypes}
@@ -960,6 +1011,43 @@ function WorkflowEditorContent() {
         onDelete={handleDeleteNode}
         workflowVariables={workflowVariables}
       />
+
+      {/* Data Mapping Modal */}
+      {mapping.mappingModalEdgeId && <DataMappingModal />}
+
+      {/* Execution Replay Panel */}
+      {layout.showReplay && replayExecution && (
+        <ExecutionReplayPanel
+          execution={{
+            id: replayExecution.id,
+            workflowId: replayExecution.workflowId,
+            status: replayExecution.status,
+            startedAt: replayExecution.startedAt || undefined,
+            finishedAt: replayExecution.finishedAt || undefined,
+            input: replayExecution.inputData || undefined,
+            output: replayExecution.outputData || undefined,
+            error: replayExecution.errorMessage || undefined,
+            logs: replayExecution.nodeLogs?.map(log => ({
+              id: log.id,
+              nodeId: log.nodeId,
+              nodeName: log.nodeName || undefined,
+              nodeType: log.nodeType,
+              status: log.status,
+              inputData: log.inputData,
+              outputData: log.outputData,
+              error: log.error || undefined,
+              startedAt: log.startedAt || undefined,
+              finishedAt: log.finishedAt || undefined,
+              duration: log.duration || undefined,
+              retryCount: log.retryCount,
+            })),
+          }}
+          workflowName={workflow?.name || 'Workflow'}
+          isOpen={layout.showReplay}
+          onClose={() => togglePanel('showReplay')}
+          onNodeHighlight={handleNodeHighlight}
+        />
+      )}
     </div>
   );
 }
