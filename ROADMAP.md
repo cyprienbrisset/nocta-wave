@@ -53,46 +53,13 @@ Ce document présente les nodes à ajouter, les améliorations planifiées et le
 - [ ] Scheduled executions avec calendrier
 - [ ] Bulk execution avec rate limiting
 
-#### 2. Monitoring
-- [ ] Dashboard de métriques temps réel
-- [ ] Alertes sur seuils (durée, erreurs, volume)
-- [ ] Logs structurés avec recherche
-- [ ] Tracing distribué (OpenTelemetry)
-
-#### 3. Sécurité
-- [ ] RBAC (Role-Based Access Control)
-- [ ] API keys avec scopes
-- [ ] IP whitelisting
-- [ ] Audit trail complet
-- [ ] Chiffrement at-rest des données sensibles
 
 ---
 
 ## Nouvelles fonctionnalités
 
-### 1. Sub-workflows
-- Workflows réutilisables comme nodes
-- Paramètres d'entrée/sortie définis
-- Versioning des sub-workflows
-- Bibliothèque partagée
 
-### 2. Workflow Templates
-- Galerie de templates par use case
-- One-click deployment
-- Personnalisation guidée
-- Templates communautaires
 
-### 3. Variables & Environnements
-- Variables globales
-- Variables par environnement (dev/staging/prod)
-- Secrets management intégré
-- Environment promotion
-
-### 4. Branching & Merge
-- Branches de workflows (comme Git)
-- Merge avec résolution de conflits
-- Pull requests pour workflows
-- Review process
 
 ### 5. Testing Framework
 - Tests unitaires pour nodes
@@ -105,34 +72,6 @@ Ce document présente les nodes à ajouter, les améliorations planifiées et le
 - Real-time subscriptions (WebSocket)
 - SDK client (JS/TS, Python)
 - CLI pour automation
-
----
-
-## Timeline suggérée
-
-### Phase 1 - Fondations (Q1)
-- Triggers additionnels (Event, Queue)
-- Messaging nodes (RabbitMQ, SQS)
-- AI nodes (Anthropic, Google AI)
-- Amélioration gestion des erreurs
-
-### Phase 2 - Intégrations (Q2)
-- CRM nodes (Salesforce, HubSpot)
-- Project management (Jira, Linear)
-- Communication (Teams, Telegram)
-- E-commerce (Shopify)
-
-### Phase 3 - Enterprise (Q3)
-- Sub-workflows
-- RBAC & Audit
-- Environments & Variables
-- Templates gallery
-
-### Phase 4 - Scale (Q4)
-- Performance optimizations
-- Monitoring avancé
-- Testing framework
-- API GraphQL
 
 ---
 
