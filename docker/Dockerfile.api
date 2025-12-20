@@ -48,8 +48,8 @@ COPY . .
 RUN pnpm --filter @ws-flows/shared build
 RUN pnpm --filter @ws-flows/nodes build
 
-# Generate Prisma client (use local version, not npx)
-RUN cd apps/api && ./node_modules/.bin/prisma generate
+# Generate Prisma client
+RUN cd apps/api && pnpm exec prisma generate
 
 # Build API
 RUN pnpm --filter @ws-flows/api build
@@ -57,12 +57,29 @@ RUN pnpm --filter @ws-flows/api build
 # Debug: show what was built
 RUN echo "=== Build output ===" && ls -la apps/api/dist/ && ls -la apps/api/dist/src/ 2>/dev/null || true
 
-# Verify build succeeded (NestJS outputs to dist/src/ when prisma is included in tsconfig)
+# Verify build succeeded
 RUN ls -la apps/api/dist/src/main.js || ls -la apps/api/dist/main.js || (echo "ERROR: Build failed - main.js not found" && exit 1)
 
-# Seed script is already compiled by NestJS build to dist/prisma/seed.js
 # Debug: verify seed was compiled
 RUN ls -la apps/api/dist/prisma/ 2>/dev/null || echo "Warning: dist/prisma not found"
+
+# Use pnpm deploy to create a self-contained production bundle
+RUN pnpm --filter @ws-flows/api deploy --prod /app/deploy
+
+# Copy Prisma artifacts to deploy folder
+RUN cp -r apps/api/prisma /app/deploy/prisma
+RUN cp -r apps/api/dist /app/deploy/dist
+
+# Copy shared packages dist to deploy node_modules
+RUN mkdir -p /app/deploy/node_modules/@ws-flows/shared
+RUN mkdir -p /app/deploy/node_modules/@ws-flows/nodes
+RUN cp -r packages/shared/dist /app/deploy/node_modules/@ws-flows/shared/
+RUN cp packages/shared/package.json /app/deploy/node_modules/@ws-flows/shared/
+RUN cp -r packages/nodes/dist /app/deploy/node_modules/@ws-flows/nodes/
+RUN cp packages/nodes/package.json /app/deploy/node_modules/@ws-flows/nodes/
+
+# Generate Prisma client in deploy folder
+RUN cd /app/deploy && npx prisma generate
 
 # -----------------------------------------------------------------------------
 # Stage 3: Production Runner
@@ -78,22 +95,8 @@ RUN adduser --system --uid 1001 nestjs
 
 WORKDIR /app
 
-# Copy built application (NestJS outputs to dist/src/ due to tsconfig include of prisma)
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist/src ./dist
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/package.json ./
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/prisma/schema.prisma ./prisma/
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/prisma/migrations ./prisma/migrations
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist/prisma ./prisma/dist
-
-# Copy node_modules (includes Prisma CLI, client, and all dependencies)
-# With pnpm, Prisma client is in .pnpm directory structure and properly symlinked
-COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
-
-# Copy built shared packages
-COPY --from=builder --chown=nestjs:nodejs /app/packages/shared/dist ./node_modules/@ws-flows/shared/dist
-COPY --from=builder --chown=nestjs:nodejs /app/packages/shared/package.json ./node_modules/@ws-flows/shared/
-COPY --from=builder --chown=nestjs:nodejs /app/packages/nodes/dist ./node_modules/@ws-flows/nodes/dist
-COPY --from=builder --chown=nestjs:nodejs /app/packages/nodes/package.json ./node_modules/@ws-flows/nodes/
+# Copy the self-contained deploy folder
+COPY --from=builder --chown=nestjs:nodejs /app/deploy ./
 
 # Copy entrypoint script
 COPY --chown=nestjs:nodejs docker/entrypoint.sh ./entrypoint.sh
