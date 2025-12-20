@@ -67,6 +67,13 @@ export interface InputDefinition {
   itemType?: string;
   /** Credential types for credential inputs */
   credentialTypes?: string[];
+  /** Language for code inputs (e.g., 'javascript', 'graphql', 'json') */
+  language?: string;
+  /** Conditional display: show when another field has specific value */
+  showWhen?: {
+    field: string;
+    equals: unknown;
+  };
 }
 
 export interface OutputDefinition {
@@ -85,6 +92,8 @@ export interface OutputDefinition {
 export interface SelectOption {
   label: string;
   value: string | number | boolean;
+  /** Description shown in UI for this option */
+  description?: string;
 }
 
 export interface ValidationRule {

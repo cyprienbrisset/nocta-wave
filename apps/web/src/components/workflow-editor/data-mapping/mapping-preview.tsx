@@ -141,7 +141,53 @@ export function MappingPreview({ mapping, sourceSchema }: MappingPreviewProps) {
   // Get source node data for preview
   const sourceData = useMemo(() => {
     if (!sourceSchema) return null;
-    return debug.nodeData[sourceSchema.nodeId]?.output;
+    const runtimeData = debug.nodeData[sourceSchema.nodeId]?.output;
+    if (runtimeData) return runtimeData;
+
+    // Generate sample data from schema if no runtime data
+    const generateSampleData = (fields: FieldSchema[]): Record<string, unknown> => {
+      const result: Record<string, unknown> = {};
+      for (const field of fields) {
+        let value: unknown;
+        switch (field.type) {
+          case 'string':
+            value = field.sampleValue ?? 'example_value';
+            break;
+          case 'number':
+            value = field.sampleValue ?? 42;
+            break;
+          case 'boolean':
+            value = field.sampleValue ?? true;
+            break;
+          case 'array':
+            value = field.sampleValue ?? [
+              { id: 1, name: 'Item 1' },
+              { id: 2, name: 'Item 2' },
+            ];
+            break;
+          case 'object':
+            value = field.sampleValue ?? (field.children
+              ? generateSampleData(field.children)
+              : { key: 'value' });
+            break;
+          case 'date':
+            value = field.sampleValue ?? new Date().toISOString();
+            break;
+          default:
+            value = field.sampleValue ?? null;
+        }
+        // Extract field name from path (e.g., "output.data" -> "data")
+        const fieldName = field.name;
+        result[fieldName] = value;
+      }
+      return result;
+    };
+
+    if (sourceSchema.outputSchema.length > 0) {
+      return generateSampleData(sourceSchema.outputSchema);
+    }
+
+    return null;
   }, [sourceSchema, debug.nodeData]);
 
   // Get value from source path
@@ -233,8 +279,10 @@ export function MappingPreview({ mapping, sourceSchema }: MappingPreviewProps) {
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="text-center text-gray-500">
             <AlertCircle className="h-6 w-6 mx-auto mb-2 opacity-50" />
-            <p className="text-xs">Aucune donnee disponible</p>
-            <p className="text-[10px] mt-1">Executez le workflow pour voir le preview</p>
+            <p className="text-xs">Preview non disponible</p>
+            <p className="text-[10px] mt-1">
+              Les donnees de test seront disponibles apres execution du workflow
+            </p>
           </div>
         </div>
       </div>

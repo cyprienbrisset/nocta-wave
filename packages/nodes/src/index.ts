@@ -156,6 +156,15 @@ export {
   weaviateNode,
   // Other
   rssNode,
+  // API & Development
+  graphqlNode,
+  // Browser Automation
+  puppeteerNode,
+  // IoT & Messaging
+  mqttNode,
+  // Source Control
+  gitlabNode,
+  bitbucketNode,
   integrationNodes,
 } from './integrations';
 

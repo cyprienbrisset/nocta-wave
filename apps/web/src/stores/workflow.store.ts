@@ -124,6 +124,10 @@ interface WorkflowState {
   resetWorkflow: () => void;
   setIsDirty: (isDirty: boolean) => void;
 
+  // Collaboration updates (don't mark as dirty)
+  setNodesFromCollaboration: (nodes: WorkflowNode[]) => void;
+  setEdgesFromCollaboration: (edges: Edge[]) => void;
+
   // Undo/Redo
   undo: () => void;
   redo: () => void;
@@ -342,6 +346,15 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   },
 
   setIsDirty: (isDirty) => set({ isDirty }),
+
+  // Collaboration updates - don't mark as dirty to avoid broadcast loops
+  setNodesFromCollaboration: (nodes) => {
+    set({ nodes });
+  },
+
+  setEdgesFromCollaboration: (edges) => {
+    set({ edges });
+  },
 
   // Undo/Redo implementation
   pushHistory: (action) => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, DragEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, DragEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -14,14 +14,15 @@ import {
   ReactFlowProvider,
   SelectionMode,
   type NodeMouseHandler,
+  type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Save, Play, ArrowLeft, Variable, Workflow, Clock, Bug, Rocket, CheckCircle2, Terminal, Eye, PanelRight, PanelRightClose, BookOpen, X, GitBranch, History } from 'lucide-react';
+import { Save, Play, ArrowLeft, Variable, Workflow, Clock, Bug, Rocket, CheckCircle2, Terminal, Eye, PanelRight, PanelRightClose, BookOpen, X, GitBranch, History, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { workflowsApi, WorkflowGraph } from '@/lib/api/workflows';
 import { executionsApi } from '@/lib/api/executions';
-import { useWorkflowStore } from '@/stores/workflow.store';
+import { useWorkflowStore, type WorkflowNode } from '@/stores/workflow.store';
 import { toast } from '@/components/ui/use-toast';
 import { LibraryPanel } from '@/components/workflow-editor/library-panel';
 import { NodeEditModal } from '@/components/workflow-editor/node-edit-modal';
@@ -40,6 +41,9 @@ import { BranchPanel } from '@/components/branches/branch-panel';
 import { branchesApi } from '@/lib/api/branches';
 import { DataMappingModal } from '@/components/workflow-editor/data-mapping';
 import { ExecutionReplayPanel } from '@/components/workflow-editor/execution-replay';
+import { CollaborationLinksPanel, PresenceAvatars, CollaboratorCursors, useCursorTracking } from '@/components/collaboration';
+import type { CursorPosition } from '@ws-flows/shared';
+import { collaborationSocket } from '@/lib/socket/collaboration-socket';
 import Link from 'next/link';
 
 // Panel layout persistence
@@ -112,6 +116,10 @@ function WorkflowEditorContent() {
   const [showMinimap, setShowMinimap] = useState(true);
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
   const [replayExecutionId, setReplayExecutionId] = useState<string | null>(null);
+  const [isCollaborationLinksOpen, setIsCollaborationLinksOpen] = useState(false);
+  const [isCollaborationConnected, setIsCollaborationConnected] = useState(false);
+  const [collaborators, setCollaborators] = useState<{ id: string; name: string; color: string; isGuest?: boolean; cursor?: CursorPosition }[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Load layout on mount
   useEffect(() => {
@@ -128,6 +136,8 @@ function WorkflowEditorContent() {
     edges,
     setNodes,
     setEdges,
+    setNodesFromCollaboration,
+    setEdgesFromCollaboration,
     onNodesChange,
     onEdgesChange,
     onConnect,
@@ -180,6 +190,128 @@ function WorkflowEditorContent() {
     }
     return () => resetWorkflow();
   }, [workflow, setNodes, setEdges, setIsDirty, resetWorkflow]);
+
+  // Connect to collaboration socket
+  useEffect(() => {
+    if (!workflowId) return;
+
+    const connectToCollaboration = async () => {
+      try {
+        // Get JWT token from localStorage (where it's stored by the auth system)
+        const token = localStorage.getItem('accessToken');
+
+        if (!token) {
+          console.warn('[Collaboration] No auth token found in localStorage');
+          return;
+        }
+
+        console.log('[Collaboration] Connecting with token...');
+        await collaborationSocket.connect(token);
+        console.log('[Collaboration] Connected successfully');
+
+        setIsCollaborationConnected(true);
+
+        // Join the workflow room
+        console.log('[Collaboration] Joining workflow:', workflowId);
+        const result = await collaborationSocket.joinWorkflow(workflowId);
+        if (result?.collaborator) {
+          setCurrentUserId(result.collaborator.id);
+        }
+        if (result?.collaborators) {
+          setCollaborators(result.collaborators);
+        }
+        console.log('[Collaboration] Joined workflow successfully:', result);
+      } catch (error) {
+        console.error('[Collaboration] Failed to connect:', error);
+      }
+    };
+
+    connectToCollaboration();
+
+    return () => {
+      if (collaborationSocket.isConnected()) {
+        collaborationSocket.leaveWorkflow(workflowId).catch(() => {});
+        collaborationSocket.disconnect();
+      }
+      setIsCollaborationConnected(false);
+    };
+  }, [workflowId]);
+
+  // Listen for collaboration events
+  useEffect(() => {
+    if (!isCollaborationConnected) return;
+
+    const unsubUserJoined = collaborationSocket.onUserJoined(({ collaborator }) => {
+      setCollaborators((prev) => {
+        if (prev.find((c) => c.id === collaborator.id)) return prev;
+        return [...prev, collaborator];
+      });
+    });
+
+    const unsubUserLeft = collaborationSocket.onUserLeft(({ collaborator }) => {
+      setCollaborators((prev) => prev.filter((c) => c.id !== collaborator.id));
+    });
+
+    const unsubPresence = collaborationSocket.onPresenceUpdate(({ collaborators: updated }) => {
+      setCollaborators(updated);
+    });
+
+    const unsubCursor = collaborationSocket.onCursorUpdated(({ userId, position }) => {
+      setCollaborators((prev) =>
+        prev.map((c) => (c.id === userId ? { ...c, cursor: position } : c))
+      );
+    });
+
+    // Listen for graph updates from other users
+    const unsubGraphUpdate = collaborationSocket.onGraphUpdate((data) => {
+      console.log('[Collaboration] Received graph update event:', data);
+      if (data?.nodes && data?.edges) {
+        console.log('[Collaboration] Applying graph update:', { nodes: data.nodes.length, edges: data.edges.length });
+        // Use collaboration-specific setters that don't mark as dirty
+        setNodesFromCollaboration(data.nodes as WorkflowNode[]);
+        setEdgesFromCollaboration(data.edges as Edge[]);
+      }
+    });
+
+    return () => {
+      unsubUserJoined();
+      unsubUserLeft();
+      unsubPresence();
+      unsubCursor();
+      unsubGraphUpdate();
+    };
+  }, [isCollaborationConnected, setNodesFromCollaboration, setEdgesFromCollaboration]);
+
+  // Broadcast graph updates to collaborators with debounce
+  const broadcastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastBroadcastRef = useRef<string>('');
+
+  useEffect(() => {
+    if (!isCollaborationConnected || !isDirty) return;
+
+    // Create a hash to detect actual changes
+    const currentHash = JSON.stringify({ nodes, edges });
+    if (currentHash === lastBroadcastRef.current) return;
+
+    // Clear previous timeout
+    if (broadcastTimeoutRef.current) {
+      clearTimeout(broadcastTimeoutRef.current);
+    }
+
+    // Debounce broadcasts to avoid overwhelming the server
+    broadcastTimeoutRef.current = setTimeout(() => {
+      lastBroadcastRef.current = currentHash;
+      console.log('[Collaboration] About to broadcast graph update, isConnected:', collaborationSocket.isConnected());
+      collaborationSocket.broadcastGraphUpdate(workflowId, nodes, edges);
+      console.log('[Collaboration] Broadcasted graph update:', { nodes: nodes.length, edges: edges.length });
+    }, 100); // 100ms debounce
+
+    return () => {
+      if (broadcastTimeoutRef.current) {
+        clearTimeout(broadcastTimeoutRef.current);
+      }
+    };
+  }, [nodes, edges, isCollaborationConnected, isDirty, workflowId]);
 
   // Auto-sélectionner la dernière exécution quand le replay s'ouvre
   useEffect(() => {
@@ -477,6 +609,30 @@ function WorkflowEditorContent() {
     onEscape: () => selectNode(null),
   });
 
+  // Cursor tracking for collaboration
+  const handleCursorMove = useCallback(
+    (position: CursorPosition) => {
+      if (isCollaborationConnected && workflowId) {
+        collaborationSocket.moveCursor(workflowId, position);
+      }
+    },
+    [isCollaborationConnected, workflowId]
+  );
+
+  const trackCursor = useCursorTracking(handleCursorMove, isCollaborationConnected);
+
+  const handleMouseMove = useCallback(
+    (event: React.MouseEvent) => {
+      // Convert screen coordinates to flow coordinates
+      const bounds = event.currentTarget.getBoundingClientRect();
+      const viewport = reactFlowInstance.getViewport();
+      const x = (event.clientX - bounds.left - viewport.x) / viewport.zoom;
+      const y = (event.clientY - bounds.top - viewport.y) / viewport.zoom;
+      trackCursor({ x, y });
+    },
+    [reactFlowInstance, trackCursor]
+  );
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
@@ -640,6 +796,24 @@ function WorkflowEditorContent() {
             </Button>
           </Link>
 
+          {/* Collaborators avatars */}
+          {collaborators.length > 0 && (
+            <PresenceAvatars
+              collaborators={collaborators}
+              maxVisible={4}
+            />
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsCollaborationLinksOpen(true)}
+            className="h-8 rounded-lg text-xs border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-700 hover:text-white"
+          >
+            <Link2 className="mr-1.5 h-3.5 w-3.5" />
+            Partager
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -754,6 +928,7 @@ function WorkflowEditorContent() {
             className={cn("flex-1 min-h-0", hasBottomPanel && "h-[calc(100%-200px)]")}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
+            onMouseMove={handleMouseMove}
           >
                 <ReactFlow
                   nodes={nodes.map((node) => ({
@@ -835,6 +1010,21 @@ function WorkflowEditorContent() {
                         </p>
                       </div>
                     </Panel>
+                  )}
+
+                  {/* Collaborator cursors */}
+                  {isCollaborationConnected && (
+                    <CollaboratorCursors
+                      currentUserId={currentUserId || undefined}
+                      externalCursors={collaborators
+                        .filter((c) => c.cursor && c.id !== currentUserId)
+                        .map((c) => ({
+                          userId: c.id,
+                          name: c.name,
+                          color: c.color,
+                          position: c.cursor!,
+                        }))}
+                    />
                   )}
                 </ReactFlow>
           </div>
@@ -1048,6 +1238,13 @@ function WorkflowEditorContent() {
           onNodeHighlight={handleNodeHighlight}
         />
       )}
+
+      {/* Collaboration Links Panel */}
+      <CollaborationLinksPanel
+        workflowId={workflowId}
+        isOpen={isCollaborationLinksOpen}
+        onClose={() => setIsCollaborationLinksOpen(false)}
+      />
     </div>
   );
 }

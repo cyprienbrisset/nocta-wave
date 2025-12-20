@@ -34,6 +34,12 @@ model User {
   comments          Comment[]
   createdTemplates  WorkflowTemplate[]
   createdBranches   WorkflowBranch[]
+  // Real-time collaboration
+  workflowSessions    WorkflowSession[]
+  chatMessages        ChatMessage[]
+  chatMentions        ChatMention[]
+  workflowChanges     WorkflowChange[]
+  collaborationLinks  CollaborationLink[]
 
   @@map("users")
 }
@@ -152,6 +158,11 @@ model Workflow {
   subWorkflowUsages SubWorkflowUsage[] @relation("ParentWorkflowUsages") // Sub-workflows used IN this workflow
   branches          WorkflowBranch[]
   pullRequests      WorkflowPullRequest[]
+  // Real-time collaboration
+  sessions           WorkflowSession[]
+  chatMessages       ChatMessage[]
+  changes            WorkflowChange[]
+  collaborationLinks CollaborationLink[]
 
   @@index([teamId])
   @@index([createdById])
@@ -1033,6 +1044,161 @@ enum ReviewStatus {
   APPROVED
   CHANGES_REQUESTED
   COMMENTED
+}
+
+// ============================================================================
+// REAL-TIME COLLABORATION
+// ============================================================================
+
+model WorkflowSession {
+  id            String   @id @default(uuid())
+  workflowId    String   @map("workflow_id")
+  userId        String   @map("user_id")
+  socketId      String   @map("socket_id")
+  cursorX       Float?   @map("cursor_x")
+  cursorY       Float?   @map("cursor_y")
+  viewportX     Float?   @map("viewport_x")
+  viewportY     Float?   @map("viewport_y")
+  viewportZoom  Float?   @map("viewport_zoom")
+  color         String   @default("#6366f1") // Assigned collaborator color
+  isActive      Boolean  @default(true) @map("is_active")
+  lastHeartbeat DateTime @default(now()) @map("last_heartbeat")
+  connectedAt   DateTime @default(now()) @map("connected_at")
+  disconnectedAt DateTime? @map("disconnected_at")
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, socketId])
+  @@index([workflowId, isActive])
+  @@index([userId])
+  @@map("workflow_sessions")
+}
+
+model ChatMessage {
+  id          String    @id @default(uuid())
+  workflowId  String    @map("workflow_id")
+  authorId    String    @map("author_id")
+  content     String
+  parentId    String?   @map("parent_id")
+  nodeId      String?   @map("node_id") // Optional: reference to a node
+  createdAt   DateTime  @default(now()) @map("created_at")
+  editedAt    DateTime? @map("edited_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  workflow Workflow      @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  author   User          @relation(fields: [authorId], references: [id])
+  parent   ChatMessage?  @relation("ChatThread", fields: [parentId], references: [id])
+  replies  ChatMessage[] @relation("ChatThread")
+  mentions ChatMention[]
+
+  @@index([workflowId, createdAt])
+  @@index([authorId])
+  @@index([parentId])
+  @@map("chat_messages")
+}
+
+model ChatMention {
+  id        String   @id @default(uuid())
+  messageId String   @map("message_id")
+  userId    String   @map("user_id")
+  read      Boolean  @default(false)
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id])
+
+  @@unique([messageId, userId])
+  @@index([userId, read])
+  @@map("chat_mentions")
+}
+
+model WorkflowChange {
+  id           String     @id @default(uuid())
+  workflowId   String     @map("workflow_id")
+  userId       String     @map("user_id")
+  changeType   ChangeType @map("change_type")
+  nodeId       String?    @map("node_id")
+  edgeId       String?    @map("edge_id")
+  previousData Json?      @map("previous_data")
+  newData      Json?      @map("new_data")
+  description  String?
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@index([workflowId, createdAt])
+  @@index([userId])
+  @@index([nodeId])
+  @@map("workflow_changes")
+}
+
+enum ChangeType {
+  NODE_ADDED
+  NODE_UPDATED
+  NODE_DELETED
+  NODE_MOVED
+  EDGE_ADDED
+  EDGE_DELETED
+  CONFIG_CHANGED
+  SETTINGS_CHANGED
+}
+
+// Collaboration invite links for guest users
+model CollaborationLink {
+  id           String                    @id @default(uuid())
+  workflowId   String                    @map("workflow_id")
+  createdById  String                    @map("created_by_id")
+  token        String                    @unique @default(uuid())
+  name         String?                   // Optional name for the link
+  permission   CollaborationPermission   @default(VIEW)
+  maxUses      Int?                      @map("max_uses")  // null = unlimited
+  useCount     Int                       @default(0) @map("use_count")
+  expiresAt    DateTime?                 @map("expires_at")
+  isActive     Boolean                   @default(true) @map("is_active")
+  createdAt    DateTime                  @default(now()) @map("created_at")
+  updatedAt    DateTime                  @updatedAt @map("updated_at")
+
+  workflow     Workflow                  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  createdBy    User                      @relation(fields: [createdById], references: [id])
+  guestSessions GuestSession[]
+
+  @@index([workflowId])
+  @@index([token])
+  @@index([createdById])
+  @@map("collaboration_links")
+}
+
+// Guest sessions for users joining via collaboration links
+model GuestSession {
+  id              String            @id @default(uuid())
+  linkId          String            @map("link_id")
+  guestName       String            @map("guest_name")
+  guestColor      String            @map("guest_color")
+  socketId        String?           @map("socket_id")
+  cursorX         Float?            @map("cursor_x")
+  cursorY         Float?            @map("cursor_y")
+  viewportX       Float?            @map("viewport_x")
+  viewportY       Float?            @map("viewport_y")
+  viewportZoom    Float?            @map("viewport_zoom")
+  isActive        Boolean           @default(true) @map("is_active")
+  lastHeartbeat   DateTime          @default(now()) @map("last_heartbeat")
+  connectedAt     DateTime          @default(now()) @map("connected_at")
+  disconnectedAt  DateTime?         @map("disconnected_at")
+
+  link            CollaborationLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@index([linkId, isActive])
+  @@index([socketId])
+  @@map("guest_sessions")
+}
+
+enum CollaborationPermission {
+  VIEW      // Can only view the workflow
+  COMMENT   // Can view and add comments/chat
+  EDIT      // Can view, comment, and edit the workflow
 }
 
 // ============================================================================

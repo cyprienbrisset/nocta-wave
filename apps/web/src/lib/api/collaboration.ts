@@ -255,3 +255,130 @@ export const templatesApi = {
     return api.post<Template>(`/templates/from-workflow/${workflowId}`, data);
   },
 };
+
+// ============================================================================
+// COLLABORATION LINKS
+// ============================================================================
+
+export type CollaborationPermission = 'VIEW' | 'COMMENT' | 'EDIT';
+
+export interface CollaborationLink {
+  id: string;
+  workflowId: string;
+  token: string;
+  name: string | null;
+  permission: CollaborationPermission;
+  maxUses: number | null;
+  useCount: number;
+  expiresAt: string | null;
+  isActive: boolean;
+  createdAt: string;
+  createdBy: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  workflow: {
+    id: string;
+    name: string;
+  };
+}
+
+export interface GuestSession {
+  id: string;
+  workflowId: string;
+  guestName: string;
+  guestColor: string;
+  permission: CollaborationPermission;
+}
+
+export interface CollaborationLinkInfo {
+  id: string;
+  workflowName: string;
+  creatorName: string;
+  permission: CollaborationPermission;
+  isValid: boolean;
+  expiresAt: string | null;
+}
+
+export interface CreateCollaborationLinkRequest {
+  workflowId: string;
+  name?: string;
+  permission?: CollaborationPermission;
+  maxUses?: number;
+  expiresInHours?: number;
+}
+
+export interface JoinAsGuestResponse {
+  id: string;
+  name: string;
+  color: string;
+  permission: CollaborationPermission;
+  workflowId: string;
+  workflowName: string;
+  isGuest: true;
+}
+
+export interface GuestWorkflowData {
+  workflow: {
+    id: string;
+    name: string;
+    description: string | null;
+    graph: any;
+  };
+  permission: CollaborationPermission;
+}
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4001/api';
+
+export const collaborationLinksApi = {
+  async create(data: CreateCollaborationLinkRequest): Promise<CollaborationLink> {
+    return api.post<CollaborationLink>('/collaboration-links', data);
+  },
+
+  async getByWorkflow(workflowId: string): Promise<CollaborationLink[]> {
+    return api.get<CollaborationLink[]>(`/collaboration-links/workflow/${workflowId}`);
+  },
+
+  async getLinkInfo(token: string): Promise<CollaborationLinkInfo> {
+    // This is a public endpoint, so we don't use the authenticated API client
+    const response = await fetch(`${API_URL}/collaboration-links/validate/${token}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || 'Lien invalide');
+    }
+    return response.json();
+  },
+
+  async joinAsGuest(token: string, guestName: string): Promise<JoinAsGuestResponse> {
+    // This is a public endpoint
+    const response = await fetch(`${API_URL}/collaboration-links/join/${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guestName }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || 'Impossible de rejoindre');
+    }
+    return response.json();
+  },
+
+  async getWorkflowForGuest(sessionId: string): Promise<GuestWorkflowData> {
+    // This is a public endpoint
+    const response = await fetch(`${API_URL}/collaboration-links/guest/${sessionId}/workflow`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || 'Impossible de charger le workflow');
+    }
+    return response.json();
+  },
+
+  async delete(linkId: string): Promise<void> {
+    await api.delete(`/collaboration-links/${linkId}`);
+  },
+
+  async deactivate(linkId: string): Promise<void> {
+    await api.post(`/collaboration-links/${linkId}/deactivate`);
+  },
+};

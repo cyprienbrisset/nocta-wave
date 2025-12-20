@@ -4,6 +4,7 @@ import type {
   NodeCategory,
   InputDefinition,
   OutputDefinition,
+  SelectOption,
 } from '@ws-flows/shared';
 import type { CreateNodeOptions, NodeBuilder } from './types';
 
@@ -147,7 +148,7 @@ export const input = {
   select(
     name: string,
     label: string,
-    selectOptions: Array<{ label: string; value: string | number | boolean }>,
+    selectOptions: SelectOption[],
     options?: Partial<Omit<InputDefinition, 'name' | 'type' | 'label' | 'options'>>
   ): InputDefinition {
     return {
@@ -247,7 +248,7 @@ export const input = {
   multiSelect(
     name: string,
     label: string,
-    selectOptions: Array<{ label: string; value: string | number | boolean }>,
+    selectOptions: SelectOption[],
     options?: Partial<Omit<InputDefinition, 'name' | 'type' | 'label' | 'options'>>
   ): InputDefinition {
     return {

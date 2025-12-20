@@ -88,6 +88,19 @@ export { pagerdutyNode } from './pagerduty';
 // Other
 export { rssNode } from './rss';
 
+// API & Development
+export { graphqlNode } from './graphql';
+
+// Browser Automation
+export { puppeteerNode } from './puppeteer';
+
+// IoT & Messaging
+export { mqttNode } from './mqtt';
+
+// Source Control
+export { gitlabNode } from './gitlab';
+export { bitbucketNode } from './bitbucket';
+
 // Imports for array
 import { slackNode } from './slack';
 import { discordNode } from './discord';
@@ -167,6 +180,19 @@ import { awsLambdaNode } from './aws-lambda';
 import { gcfNode } from './gcf';
 import { datadogNode } from './datadog';
 import { pagerdutyNode } from './pagerduty';
+
+// API & Development
+import { graphqlNode } from './graphql';
+
+// Browser Automation
+import { puppeteerNode } from './puppeteer';
+
+// IoT & Messaging
+import { mqttNode } from './mqtt';
+
+// Source Control
+import { gitlabNode } from './gitlab';
+import { bitbucketNode } from './bitbucket';
 
 import type { NodeDefinition } from '@ws-flows/shared';
 
@@ -260,4 +286,17 @@ export const integrationNodes: NodeDefinition[] = [
 
   // Other
   rssNode,
+
+  // API & Development
+  graphqlNode,
+
+  // Browser Automation
+  puppeteerNode,
+
+  // IoT & Messaging
+  mqttNode,
+
+  // Source Control
+  gitlabNode,
+  bitbucketNode,
 ];

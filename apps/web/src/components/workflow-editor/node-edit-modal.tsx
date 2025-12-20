@@ -22,12 +22,19 @@ import { VariablePicker, type VariableOption } from './variable-picker';
 import type { CredentialType } from '@/lib/api/credentials';
 import type { WorkflowVariable } from './workflow-variables-panel';
 
+import type { Edge } from '@xyflow/react';
+import type { WorkflowNode } from '@/stores/workflow.store';
+
 interface NodeEditModalProps {
   nodeId: string | null;
   isOpen: boolean;
   onClose: () => void;
   onDelete: (nodeId: string) => void;
   workflowVariables?: WorkflowVariable[];
+  // Optional controlled mode props for guest editor
+  externalNodes?: WorkflowNode[];
+  externalEdges?: Edge[];
+  onExternalUpdateNode?: (nodeId: string, data: Partial<WorkflowNode['data']>) => void;
 }
 
 const categoryConfig: Record<string, { icon: ReactNode; color: string; borderColor: string }> = {
@@ -64,8 +71,23 @@ const nodeCredentialTypes: Record<string, CredentialType[]> = {
   'trigger.webhook': ['API_KEY'],
 };
 
-export function NodeEditModal({ nodeId, isOpen, onClose, onDelete, workflowVariables = [] }: NodeEditModalProps) {
-  const { nodes, edges, updateNode } = useWorkflowStore();
+export function NodeEditModal({
+  nodeId,
+  isOpen,
+  onClose,
+  onDelete,
+  workflowVariables = [],
+  externalNodes,
+  externalEdges,
+  onExternalUpdateNode,
+}: NodeEditModalProps) {
+  const storeState = useWorkflowStore();
+
+  // Use external data if provided (controlled mode for guest editor), otherwise use store
+  const nodes = externalNodes ?? storeState.nodes;
+  const edges = externalEdges ?? storeState.edges;
+  const updateNode = onExternalUpdateNode ?? storeState.updateNode;
+
   const selectedNode = nodes.find((n) => n.id === nodeId);
 
   const { data: nodeDefinition } = useQuery({

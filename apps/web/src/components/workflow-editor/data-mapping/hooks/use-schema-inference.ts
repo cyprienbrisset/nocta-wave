@@ -97,21 +97,56 @@ export function useSchemaInference() {
   const inferNodeOutputSchema = useCallback(
     (nodeId: string): FieldSchema[] => {
       const nodeData = debug.nodeData[nodeId];
-      if (!nodeData?.output) return [];
+      const node = nodes.find((n) => n.id === nodeId);
 
-      const output = nodeData.output;
+      // If we have runtime data, use it
+      if (nodeData?.output) {
+        const output = nodeData.output;
 
-      if (typeof output !== 'object' || output === null) {
-        // Single value output
-        return [inferSchemaFromValue(output, 'output', 'output', 0)];
+        if (typeof output !== 'object' || output === null) {
+          // Single value output
+          return [inferSchemaFromValue(output, 'output', 'output', 0)];
+        }
+
+        // Object output - create schema for each top-level key
+        return Object.entries(output).map(([key, value]) =>
+          inferSchemaFromValue(value, `output.${key}`, key, 0)
+        );
       }
 
-      // Object output - create schema for each top-level key
-      return Object.entries(output).map(([key, value]) =>
-        inferSchemaFromValue(value, `output.${key}`, key, 0)
-      );
+      // Fallback to node definition outputs
+      if (node?.data?.outputs && Array.isArray(node.data.outputs)) {
+        return node.data.outputs.map((output: { name: string; type?: string; description?: string }) => ({
+          path: `output.${output.name}`,
+          name: output.name,
+          type: (output.type as DataType) || 'unknown',
+          isArray: output.type === 'array',
+          description: output.description,
+          sampleValue: undefined,
+        }));
+      }
+
+      // Fallback to config values as a hint for expected structure
+      if (node?.data?.config) {
+        const configEntries = Object.entries(node.data.config)
+          .filter(([key]) => key.startsWith('output') || key === 'result');
+        if (configEntries.length > 0) {
+          return configEntries.map(([key, value]) =>
+            inferSchemaFromValue(value, `output.${key}`, key, 0)
+          );
+        }
+      }
+
+      // Default: single output field
+      return [{
+        path: 'output',
+        name: 'output',
+        type: 'object',
+        isArray: false,
+        description: 'Node output (execute workflow to see actual data)',
+      }];
     },
-    [debug.nodeData, inferSchemaFromValue]
+    [debug.nodeData, nodes, inferSchemaFromValue]
   );
 
   /**
@@ -120,16 +155,39 @@ export function useSchemaInference() {
   const inferNodeInputSchema = useCallback(
     (nodeId: string): FieldSchema[] => {
       const node = nodes.find((n) => n.id === nodeId);
-      if (!node?.data?.config) return [];
+      const nodeData = debug.nodeData[nodeId];
 
-      const config = node.data.config;
+      // If we have runtime input data, use it
+      if (nodeData?.input) {
+        const input = nodeData.input;
+        if (typeof input === 'object' && input !== null) {
+          return Object.entries(input).map(([key, value]) =>
+            inferSchemaFromValue(value, `config.${key}`, key, 0)
+          );
+        }
+      }
 
-      // Create schema from config keys
-      return Object.entries(config).map(([key, value]) =>
-        inferSchemaFromValue(value, `config.${key}`, key, 0)
-      );
+      // Fallback to config definition
+      if (node?.data?.config) {
+        const config = node.data.config;
+        const entries = Object.entries(config);
+        if (entries.length > 0) {
+          return entries.map(([key, value]) =>
+            inferSchemaFromValue(value, `config.${key}`, key, 0)
+          );
+        }
+      }
+
+      // Default: config object
+      return [{
+        path: 'config',
+        name: 'config',
+        type: 'object',
+        isArray: false,
+        description: 'Node configuration',
+      }];
     },
-    [nodes, inferSchemaFromValue]
+    [nodes, debug.nodeData, inferSchemaFromValue]
   );
 
   /**
