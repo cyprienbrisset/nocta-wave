@@ -70,13 +70,17 @@ RUN pnpm --filter @ws-flows/api deploy --prod /app/deploy
 RUN cp -r apps/api/prisma /app/deploy/prisma
 RUN cp -r apps/api/dist /app/deploy/dist
 
-# Copy shared packages dist to deploy node_modules
-RUN mkdir -p /app/deploy/node_modules/@ws-flows/shared
-RUN mkdir -p /app/deploy/node_modules/@ws-flows/nodes
-RUN cp -r packages/shared/dist /app/deploy/node_modules/@ws-flows/shared/
-RUN cp packages/shared/package.json /app/deploy/node_modules/@ws-flows/shared/
-RUN cp -r packages/nodes/dist /app/deploy/node_modules/@ws-flows/nodes/
-RUN cp packages/nodes/package.json /app/deploy/node_modules/@ws-flows/nodes/
+# pnpm deploy creates symlinks to workspace packages, but these won't work
+# in the final image since /app/packages won't exist. Remove symlinks and
+# copy actual built files instead.
+RUN rm -rf /app/deploy/node_modules/@ws-flows/shared \
+    && rm -rf /app/deploy/node_modules/@ws-flows/nodes \
+    && mkdir -p /app/deploy/node_modules/@ws-flows/shared \
+    && mkdir -p /app/deploy/node_modules/@ws-flows/nodes \
+    && cp -r packages/shared/dist /app/deploy/node_modules/@ws-flows/shared/ \
+    && cp packages/shared/package.json /app/deploy/node_modules/@ws-flows/shared/ \
+    && cp -r packages/nodes/dist /app/deploy/node_modules/@ws-flows/nodes/ \
+    && cp packages/nodes/package.json /app/deploy/node_modules/@ws-flows/nodes/
 
 # Generate Prisma client in deploy folder
 RUN cd /app/deploy && npx prisma generate

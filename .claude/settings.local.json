@@ -38,7 +38,8 @@
       "Bash(pnpm --filter @ws-flows/web add:*)",
       "Bash(pnpm test:*)",
       "Bash(grep:*)",
-      "Bash(pnpm --filter @ws-flows/api add:*)"
+      "Bash(pnpm --filter @ws-flows/api add:*)",
+      "Bash(xargs dirname:*)"
     ]
   }
 }
