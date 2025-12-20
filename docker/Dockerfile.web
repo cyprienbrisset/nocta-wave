@@ -47,7 +47,9 @@ RUN pnpm --filter @ws-flows/shared build
 
 # Set build-time environment variables
 ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_WS_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 
 # Ensure public directory exists
 RUN mkdir -p /app/apps/web/public
@@ -75,12 +77,16 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Copy built application
+# Copy built application (standalone output includes node_modules and server.js)
+# In a monorepo, standalone output preserves the workspace structure
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 
-# Copy public folder
+# Copy public folder (if it exists and has content)
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
+
+# Debug: show what was copied (remove after confirming deployment works)
+RUN ls -la && ls -la apps/web/ 2>/dev/null || true
 
 # Expose port
 EXPOSE 3000
@@ -88,8 +94,8 @@ EXPOSE 3000
 # Switch to non-root user
 USER nextjs
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+# Health check (increased start_period for cold start)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1
 
 # Start application with dumb-init for proper signal handling
