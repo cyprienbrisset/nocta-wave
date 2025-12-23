@@ -17,7 +17,8 @@ interface WorkflowVariablesPanelProps {
   isOpen: boolean;
   onClose: () => void;
   variables: WorkflowVariable[];
-  onChange: (variables: WorkflowVariable[]) => void;
+  onChange?: (variables: WorkflowVariable[]) => void;
+  readOnly?: boolean;
 }
 
 export function WorkflowVariablesPanel({
@@ -25,6 +26,7 @@ export function WorkflowVariablesPanel({
   onClose,
   variables,
   onChange,
+  readOnly = false,
 }: WorkflowVariablesPanelProps) {
   const [newVarName, setNewVarName] = useState('');
   const [newVarType, setNewVarType] = useState<WorkflowVariable['type']>('string');
@@ -33,7 +35,7 @@ export function WorkflowVariablesPanel({
   if (!isOpen) return null;
 
   const handleAddVariable = () => {
-    if (!newVarName.trim()) return;
+    if (!newVarName.trim() || readOnly || !onChange) return;
 
     // Vérifier les doublons
     if (variables.some((v) => v.name === newVarName)) {
@@ -50,6 +52,7 @@ export function WorkflowVariablesPanel({
   };
 
   const handleUpdateVariable = (index: number, field: keyof WorkflowVariable, value: string) => {
+    if (readOnly || !onChange) return;
     const updated = [...variables];
     const current = updated[index];
     if (current) {
@@ -59,6 +62,7 @@ export function WorkflowVariablesPanel({
   };
 
   const handleDeleteVariable = (index: number) => {
+    if (readOnly || !onChange) return;
     onChange(variables.filter((_, i) => i !== index));
   };
 
@@ -77,7 +81,9 @@ export function WorkflowVariablesPanel({
             </div>
             <div>
               <h2 className="text-lg font-semibold">Variables du workflow</h2>
-              <p className="text-xs text-muted-foreground">Gérez vos variables globales</p>
+              <p className="text-xs text-muted-foreground">
+                {readOnly ? 'Consultation des variables' : 'Gérez vos variables globales'}
+              </p>
             </div>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} className="rounded-xl">
@@ -115,6 +121,7 @@ export function WorkflowVariablesPanel({
                         value={variable.name}
                         onChange={(e) => handleUpdateVariable(index, 'name', e.target.value)}
                         className="mt-1.5 h-9 bg-muted/50"
+                        disabled={readOnly}
                       />
                     </div>
                     <div className="w-28">
@@ -124,7 +131,8 @@ export function WorkflowVariablesPanel({
                         onChange={(e) =>
                           handleUpdateVariable(index, 'type', e.target.value as WorkflowVariable['type'])
                         }
-                        className="mt-1.5 flex h-9 w-full rounded-lg border border-input bg-muted/50 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        className="mt-1.5 flex h-9 w-full rounded-lg border border-input bg-muted/50 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={readOnly}
                       >
                         <option value="string">Texte</option>
                         <option value="number">Nombre</option>
@@ -139,66 +147,71 @@ export function WorkflowVariablesPanel({
                         onChange={(e) => handleUpdateVariable(index, 'value', e.target.value)}
                         className="mt-1.5 h-9 bg-muted/50"
                         placeholder={variable.type === 'json' ? '{}' : ''}
+                        disabled={readOnly}
                       />
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-lg"
-                      onClick={() => handleDeleteVariable(index)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {!readOnly && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-lg"
+                        onClick={() => handleDeleteVariable(index)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 ))
               )}
             </div>
 
             {/* Ajouter une nouvelle variable */}
-            <div className="rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-4">
-              <h4 className="mb-3 text-sm font-semibold text-primary">Nouvelle variable</h4>
-              <div className="flex items-end gap-3">
-                <div className="flex-1">
-                  <Label className="text-xs font-medium text-muted-foreground">Nom</Label>
-                  <Input
-                    value={newVarName}
-                    onChange={(e) => setNewVarName(e.target.value)}
-                    placeholder="maVariable"
-                    className="mt-1.5 h-9"
-                  />
-                </div>
-                <div className="w-28">
-                  <Label className="text-xs font-medium text-muted-foreground">Type</Label>
-                  <select
-                    value={newVarType}
-                    onChange={(e) => setNewVarType(e.target.value as WorkflowVariable['type'])}
-                    className="mt-1.5 flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            {!readOnly && (
+              <div className="rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-4">
+                <h4 className="mb-3 text-sm font-semibold text-primary">Nouvelle variable</h4>
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <Label className="text-xs font-medium text-muted-foreground">Nom</Label>
+                    <Input
+                      value={newVarName}
+                      onChange={(e) => setNewVarName(e.target.value)}
+                      placeholder="maVariable"
+                      className="mt-1.5 h-9"
+                    />
+                  </div>
+                  <div className="w-28">
+                    <Label className="text-xs font-medium text-muted-foreground">Type</Label>
+                    <select
+                      value={newVarType}
+                      onChange={(e) => setNewVarType(e.target.value as WorkflowVariable['type'])}
+                      className="mt-1.5 flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="string">Texte</option>
+                      <option value="number">Nombre</option>
+                      <option value="boolean">Booléen</option>
+                      <option value="json">JSON</option>
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-xs font-medium text-muted-foreground">Valeur par défaut</Label>
+                    <Input
+                      value={newVarValue}
+                      onChange={(e) => setNewVarValue(e.target.value)}
+                      placeholder="valeur"
+                      className="mt-1.5 h-9"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleAddVariable}
+                    disabled={!newVarName.trim()}
+                    className="h-9 rounded-lg"
                   >
-                    <option value="string">Texte</option>
-                    <option value="number">Nombre</option>
-                    <option value="boolean">Booléen</option>
-                    <option value="json">JSON</option>
-                  </select>
+                    <Plus className="mr-1.5 h-4 w-4" />
+                    Ajouter
+                  </Button>
                 </div>
-                <div className="flex-1">
-                  <Label className="text-xs font-medium text-muted-foreground">Valeur par défaut</Label>
-                  <Input
-                    value={newVarValue}
-                    onChange={(e) => setNewVarValue(e.target.value)}
-                    placeholder="valeur"
-                    className="mt-1.5 h-9"
-                  />
-                </div>
-                <Button
-                  onClick={handleAddVariable}
-                  disabled={!newVarName.trim()}
-                  className="h-9 rounded-lg"
-                >
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  Ajouter
-                </Button>
               </div>
-            </div>
+            )}
           </div>
         </ScrollArea>
 

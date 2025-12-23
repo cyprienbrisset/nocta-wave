@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { executionsApi, type Execution, type ExecutionLog } from '@/lib/api/executions';
+import { collaborationLinksApi } from '@/lib/api/collaboration';
 import { useWorkflowStore } from '@/stores/workflow.store';
 
 export interface ExecutionStep {
@@ -45,6 +46,7 @@ interface ExecutionPanelProps {
   onNodeHighlight?: (nodeId: string | null) => void;
   embedded?: boolean;
   className?: string;
+  guestSessionId?: string;
 }
 
 export function ExecutionPanel({
@@ -55,6 +57,7 @@ export function ExecutionPanel({
   onNodeHighlight,
   embedded = false,
   className,
+  guestSessionId,
 }: ExecutionPanelProps) {
   const [isRunning, setIsRunning] = useState(false);
   const [steps, setSteps] = useState<ExecutionStep[]>([]);
@@ -146,7 +149,18 @@ export function ExecutionPanel({
   // Polling pour mettre à jour le statut de l'exécution
   const pollExecutionStatus = useCallback(async (executionId: string) => {
     try {
-      const execution = await executionsApi.get(executionId);
+      // For guest mode, we need to fetch executions from the guest API
+      let execution: Execution;
+      if (guestSessionId) {
+        const result = await collaborationLinksApi.getGuestExecutions(guestSessionId, 1);
+        const execData = result.data.find((e: Execution) => e.id === executionId);
+        if (!execData) {
+          throw new Error('Execution not found');
+        }
+        execution = execData;
+      } else {
+        execution = await executionsApi.get(executionId);
+      }
 
       // Mettre à jour les steps avec les logs réels
       if (execution.nodeLogs) {
@@ -241,7 +255,7 @@ export function ExecutionPanel({
       });
       return true;
     }
-  }, [mapExecutionLogsToSteps, onNodeHighlight, setCurrentDebugNode, addConsoleLog, steps, executionTime]);
+  }, [mapExecutionLogsToSteps, onNodeHighlight, setCurrentDebugNode, addConsoleLog, steps, executionTime, guestSessionId]);
 
   const handleStartExecution = async () => {
     setIsRunning(true);
@@ -269,8 +283,13 @@ export function ExecutionPanel({
     });
 
     try {
-      // Déclencher l'exécution via l'API
-      const execution = await executionsApi.trigger(workflowId);
+      // Déclencher l'exécution via l'API (guest ou authentifié)
+      let execution: { id: string };
+      if (guestSessionId) {
+        execution = await collaborationLinksApi.triggerAsGuest(guestSessionId);
+      } else {
+        execution = await executionsApi.trigger(workflowId);
+      }
       setCurrentExecutionId(execution.id);
 
       addConsoleLog({

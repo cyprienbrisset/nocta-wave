@@ -34,6 +34,11 @@ import {
   X,
   PanelRight,
   PanelRightClose,
+  Play,
+  Terminal,
+  Bug,
+  Variable,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
@@ -41,6 +46,10 @@ import { nodeTypes } from '@/components/workflow-editor/custom-node';
 import { LibraryPanel } from '@/components/workflow-editor/library-panel';
 import { NodeEditModal } from '@/components/workflow-editor/node-edit-modal';
 import { EditorToolbar } from '@/components/workflow-editor/editor-toolbar';
+import { ExecutionPanel } from '@/components/workflow-editor/execution-panel';
+import { DebugConsole } from '@/components/workflow-editor/debug-console';
+import { DataInspector } from '@/components/workflow-editor/data-inspector';
+import { WorkflowVariablesPanel, WorkflowVariable } from '@/components/workflow-editor/workflow-variables-panel';
 import {
   collaborationLinksApi,
   CollaborationPermission,
@@ -56,7 +65,7 @@ import type { CursorPosition } from '@ws-flows/shared';
 const permissionLabels: Record<CollaborationPermission, { label: string; icon: typeof Eye }> = {
   VIEW: { label: 'Lecture seule', icon: Eye },
   COMMENT: { label: 'Commentaires', icon: MessageSquare },
-  EDIT: { label: 'Edition', icon: Edit3 },
+  EDIT: { label: 'Édition', icon: Edit3 },
 };
 
 interface CollaboratorInfo {
@@ -66,6 +75,22 @@ interface CollaboratorInfo {
   isGuest?: boolean;
   cursor?: CursorPosition;
 }
+
+interface PanelLayout {
+  showConsole: boolean;
+  showExecution: boolean;
+  showInspector: boolean;
+  showLibrary: boolean;
+  activeBottomTab: 'console' | 'execution';
+}
+
+const defaultLayout: PanelLayout = {
+  showConsole: false,
+  showExecution: false,
+  showInspector: false,
+  showLibrary: true,
+  activeBottomTab: 'execution',
+};
 
 export default function GuestEditorPage() {
   return (
@@ -85,22 +110,54 @@ function GuestEditorContent() {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [workflowName, setWorkflowName] = useState('');
+  const [workflowVariables, setWorkflowVariables] = useState<WorkflowVariable[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [collaborators, setCollaborators] = useState<CollaboratorInfo[]>([]);
 
-  // Editor panels state (for EDIT mode)
-  const [showLibrary, setShowLibrary] = useState(true);
+  // Panel state
+  const [layout, setLayout] = useState<PanelLayout>(defaultLayout);
   const [showMinimap, setShowMinimap] = useState(true);
+  const [isVariablesPanelOpen, setIsVariablesPanelOpen] = useState(false);
+  const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
+  const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
+
+  // Editor state
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isNodeEditModalOpen, setIsNodeEditModalOpen] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+
+  // Execution state
+  const [isRunning, setIsRunning] = useState(false);
 
   // Track if we're receiving updates from collaboration to avoid broadcast loops
   const isReceivingUpdateRef = useRef(false);
   const broadcastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastBroadcastRef = useRef<string>('');
+
+  // Toggle panel helper
+  const togglePanel = useCallback((panel: keyof PanelLayout) => {
+    setLayout((prev) => {
+      const newLayout = { ...prev };
+      if (panel === 'showConsole' || panel === 'showExecution') {
+        newLayout[panel] = !prev[panel];
+        if (newLayout[panel]) {
+          newLayout.activeBottomTab = panel === 'showConsole' ? 'console' : 'execution';
+        }
+      } else if (panel !== 'activeBottomTab') {
+        newLayout[panel] = !prev[panel];
+      }
+      return newLayout;
+    });
+  }, []);
+
+  const setActiveBottomTab = useCallback((tab: 'console' | 'execution') => {
+    setLayout((prev) => ({ ...prev, activeBottomTab: tab }));
+  }, []);
+
+  const hasBottomPanel = layout.showConsole || layout.showExecution;
+  const hasRightPanel = layout.showLibrary || layout.showInspector;
 
   // Load guest session and workflow data
   useEffect(() => {
@@ -123,6 +180,7 @@ function GuestEditorContent() {
         if (data.workflow.graph) {
           setNodes(data.workflow.graph.nodes || []);
           setEdges(data.workflow.graph.edges || []);
+          setWorkflowVariables(data.workflow.graph.variables || []);
         }
 
         // Set loading to false once we have the workflow data
@@ -184,11 +242,9 @@ function GuestEditorContent() {
     // Listen for graph updates from other collaborators
     const unsubGraphUpdate = collaborationSocket.onGraphUpdate(({ nodes: newNodes, edges: newEdges }) => {
       console.log('[Guest] Received graph update:', { nodes: newNodes.length, edges: newEdges.length });
-      // Set flag to prevent broadcast loop
       isReceivingUpdateRef.current = true;
       setNodes(newNodes as Node[]);
       setEdges(newEdges as Edge[]);
-      // Reset flag after a short delay
       setTimeout(() => {
         isReceivingUpdateRef.current = false;
       }, 150);
@@ -213,7 +269,6 @@ function GuestEditorContent() {
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
       if (!guestSession || guestSession.permission !== 'EDIT') return;
-
       setNodes((nds) => applyNodeChanges(changes, nds));
     },
     [guestSession]
@@ -222,7 +277,6 @@ function GuestEditorContent() {
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       if (!guestSession || guestSession.permission !== 'EDIT') return;
-
       setEdges((eds) => applyEdgeChanges(changes, eds));
     },
     [guestSession]
@@ -231,7 +285,6 @@ function GuestEditorContent() {
   const onConnect = useCallback(
     (connection: Connection) => {
       if (!guestSession || guestSession.permission !== 'EDIT') return;
-
       setEdges((eds) => addEdge(connection, eds));
     },
     [guestSession]
@@ -242,16 +295,13 @@ function GuestEditorContent() {
     if (!isConnected || !guestSession || guestSession.permission !== 'EDIT') return;
     if (isReceivingUpdateRef.current) return;
 
-    // Create a hash to detect actual changes
     const currentHash = JSON.stringify({ nodes, edges });
     if (currentHash === lastBroadcastRef.current) return;
 
-    // Clear previous timeout
     if (broadcastTimeoutRef.current) {
       clearTimeout(broadcastTimeoutRef.current);
     }
 
-    // Debounce broadcasts
     broadcastTimeoutRef.current = setTimeout(() => {
       lastBroadcastRef.current = currentHash;
       collaborationSocket.broadcastGraphUpdate(guestSession.workflowId, nodes, edges);
@@ -302,6 +352,7 @@ function GuestEditorContent() {
 
   const handleNodeClick: NodeMouseHandler = useCallback((_event, node) => {
     setSelectedNodeId(node.id);
+    setInspectedNodeId(node.id);
   }, []);
 
   const handleNodeDoubleClick: NodeMouseHandler = useCallback((_event, node) => {
@@ -399,14 +450,18 @@ function GuestEditorContent() {
 
   const handleMouseMove = useCallback(
     (event: React.MouseEvent) => {
-      // Convert screen coordinates to flow coordinates
-      const bounds = event.currentTarget.getBoundingClientRect();
-      const viewport = reactFlowInstance.getViewport();
-      const x = (event.clientX - bounds.left - viewport.x) / viewport.zoom;
-      const y = (event.clientY - bounds.top - viewport.y) / viewport.zoom;
-      trackCursor({ x, y });
+      if (!isConnected) return;
+      try {
+        const bounds = event.currentTarget.getBoundingClientRect();
+        const viewport = reactFlowInstance.getViewport();
+        const x = (event.clientX - bounds.left - viewport.x) / viewport.zoom;
+        const y = (event.clientY - bounds.top - viewport.y) / viewport.zoom;
+        trackCursor({ x, y });
+      } catch {
+        // Ignore if viewport is not ready
+      }
     },
-    [reactFlowInstance, trackCursor]
+    [reactFlowInstance, trackCursor, isConnected]
   );
 
   // Update node from modal
@@ -419,6 +474,35 @@ function GuestEditorContent() {
       )
     );
   }, []);
+
+  // Handle node highlight from execution panel
+  const handleNodeHighlight = useCallback((nodeId: string | null) => {
+    setHighlightedNodeId(nodeId);
+    if (nodeId) {
+      setInspectedNodeId(nodeId);
+    }
+  }, []);
+
+  // Run test execution
+  const handleRunTest = useCallback(async () => {
+    if (!guestSession || isRunning) return;
+
+    setIsRunning(true);
+    try {
+      await collaborationLinksApi.triggerAsGuest(guestSession.id);
+      toast({ title: 'Exécution lancée' });
+      // Open execution panel
+      setLayout((prev) => ({ ...prev, showExecution: true, activeBottomTab: 'execution' }));
+    } catch (err) {
+      toast({
+        title: 'Erreur',
+        description: err instanceof Error ? err.message : 'Impossible de lancer l\'exécution',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRunning(false);
+    }
+  }, [guestSession, isRunning]);
 
   // Loading state
   if (isLoading) {
@@ -485,24 +569,93 @@ function GuestEditorContent() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Toggle library button - only for EDIT mode */}
+        <div className="flex items-center gap-2">
+          {/* Panel toggles for EDIT mode */}
           {canEdit && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowLibrary(!showLibrary)}
-              className={cn(
-                "h-8 rounded-lg text-xs border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-700 hover:text-white",
-                showLibrary && "bg-primary/20 border-primary/50 text-primary"
-              )}
-            >
-              {showLibrary ? <PanelRightClose className="mr-1.5 h-3.5 w-3.5" /> : <PanelRight className="mr-1.5 h-3.5 w-3.5" />}
-              Nodes
-            </Button>
-          )}
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => togglePanel('showConsole')}
+                className={cn(
+                  "h-8 rounded-lg text-xs border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-700 hover:text-white",
+                  layout.showConsole && "bg-primary/20 border-primary/50 text-primary"
+                )}
+              >
+                <Terminal className="mr-1.5 h-3.5 w-3.5" />
+                Console
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => togglePanel('showExecution')}
+                className={cn(
+                  "h-8 rounded-lg text-xs border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-700 hover:text-white",
+                  layout.showExecution && "bg-primary/20 border-primary/50 text-primary"
+                )}
+              >
+                <Bug className="mr-1.5 h-3.5 w-3.5" />
+                Test
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => togglePanel('showInspector')}
+                className={cn(
+                  "h-8 rounded-lg text-xs border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-700 hover:text-white",
+                  layout.showInspector && "bg-primary/20 border-primary/50 text-primary"
+                )}
+              >
+                <Eye className="mr-1.5 h-3.5 w-3.5" />
+                Inspecteur
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => togglePanel('showLibrary')}
+                className={cn(
+                  "h-8 rounded-lg text-xs border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-700 hover:text-white",
+                  layout.showLibrary && "bg-primary/20 border-primary/50 text-primary"
+                )}
+              >
+                {layout.showLibrary ? <PanelRightClose className="mr-1.5 h-3.5 w-3.5" /> : <PanelRight className="mr-1.5 h-3.5 w-3.5" />}
+                Nodes
+              </Button>
 
-          <div className="h-6 w-px bg-gray-700" />
+              <div className="h-6 w-px bg-gray-700" />
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsVariablesPanelOpen(true)}
+                className="h-8 rounded-lg text-xs border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-700 hover:text-white"
+              >
+                <Variable className="mr-1.5 h-3.5 w-3.5" />
+                Variables
+                {workflowVariables.length > 0 && (
+                  <span className="ml-1.5 rounded bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">
+                    {workflowVariables.length}
+                  </span>
+                )}
+              </Button>
+
+              <Button
+                size="sm"
+                onClick={handleRunTest}
+                disabled={isRunning}
+                className="h-8 rounded-lg text-xs bg-green-600 hover:bg-green-700 text-white"
+              >
+                {isRunning ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Play className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Tester
+              </Button>
+
+              <div className="h-6 w-px bg-gray-700" />
+            </>
+          )}
 
           {/* Collaborators */}
           <div className="flex items-center gap-2">
@@ -552,152 +705,273 @@ function GuestEditorContent() {
 
       {/* Main content */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Canvas */}
-        <div
-          className="flex-1 min-w-0"
-          onDragOver={canEdit ? handleDragOver : undefined}
-          onDrop={canEdit ? handleDrop : undefined}
-          onMouseMove={handleMouseMove}
-        >
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            onNodesChange={canEdit ? onNodesChange : undefined}
-            onEdgesChange={canEdit ? onEdgesChange : undefined}
-            onConnect={canEdit ? onConnect : undefined}
-            onNodeClick={canEdit ? handleNodeClick : undefined}
-            onNodeDoubleClick={canEdit ? handleNodeDoubleClick : undefined}
-            onPaneClick={canEdit ? handlePaneClick : undefined}
-            fitView
-            snapToGrid
-            snapGrid={[16, 16]}
-            nodesDraggable={canEdit}
-            nodesConnectable={canEdit}
-            elementsSelectable={canEdit}
-            panOnDrag
-            zoomOnScroll
-            defaultEdgeOptions={{
-              type: 'smoothstep',
-              animated: true,
-              style: { stroke: '#4b5563', strokeWidth: 2 },
-            }}
-            style={{ backgroundColor: '#0f0f1a' }}
+        {/* Center: Canvas + Bottom panels */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          {/* Canvas */}
+          <div
+            className={cn("flex-1 min-h-0", hasBottomPanel && "h-[calc(100%-200px)]")}
+            onDragOver={canEdit ? handleDragOver : undefined}
+            onDrop={canEdit ? handleDrop : undefined}
+            onMouseMove={handleMouseMove}
           >
-            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#2a2a3e" />
-            <Controls className="rounded-lg bg-[#1a1a2e] border-gray-800 [&>button]:bg-[#1a1a2e] [&>button]:border-gray-700 [&>button]:text-gray-400 [&>button:hover]:bg-gray-800 [&>button:hover]:text-white" />
+            <ReactFlow
+              nodes={nodes.map((node) => ({
+                ...node,
+                className: cn(
+                  highlightedNodeId === node.id && 'ring-2 ring-blue-500 ring-offset-2'
+                ),
+              }))}
+              edges={edges}
+              nodeTypes={nodeTypes}
+              onNodesChange={canEdit ? onNodesChange : undefined}
+              onEdgesChange={canEdit ? onEdgesChange : undefined}
+              onConnect={canEdit ? onConnect : undefined}
+              onNodeClick={canEdit ? handleNodeClick : undefined}
+              onNodeDoubleClick={canEdit ? handleNodeDoubleClick : undefined}
+              onPaneClick={canEdit ? handlePaneClick : undefined}
+              fitView
+              snapToGrid
+              snapGrid={[16, 16]}
+              nodesDraggable={canEdit}
+              nodesConnectable={canEdit}
+              elementsSelectable={canEdit}
+              panOnDrag
+              zoomOnScroll
+              defaultEdgeOptions={{
+                type: 'smoothstep',
+                animated: true,
+                style: { stroke: '#4b5563', strokeWidth: 2 },
+              }}
+              style={{ backgroundColor: '#0f0f1a' }}
+            >
+              <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#2a2a3e" />
+              <Controls className="rounded-lg bg-[#1a1a2e] border-gray-800 [&>button]:bg-[#1a1a2e] [&>button]:border-gray-700 [&>button]:text-gray-400 [&>button:hover]:bg-gray-800 [&>button:hover]:text-white" />
 
-            {showMinimap && (
-              <MiniMap
-                className="rounded-lg !bg-[#1a1a2e] border border-gray-800"
-                maskColor="rgba(15, 15, 26, 0.8)"
-                nodeColor={(node) => {
-                  const nodeType = (node.data as { nodeType?: string })?.nodeType || '';
-                  const category = nodeType.split('.')[0] || 'utility';
-                  const colors: Record<string, string> = {
-                    trigger: '#22c55e',
-                    http: '#3b82f6',
-                    transform: '#a855f7',
-                    logic: '#f97316',
-                    database: '#06b6d4',
-                    integration: '#ec4899',
-                    utility: '#6b7280',
-                  };
-                  return colors[category] || colors.utility || '#6b7280';
-                }}
-              />
-            )}
-
-            {/* Editor toolbar */}
-            {canEdit && (
-              <Panel position="top-left" className="m-2">
-                <EditorToolbar
-                  onFitView={handleFitView}
-                  onZoomIn={handleZoomIn}
-                  onZoomOut={handleZoomOut}
-                  showMinimap={showMinimap}
-                  onToggleMinimap={() => setShowMinimap(!showMinimap)}
+              {showMinimap && (
+                <MiniMap
+                  className="rounded-lg !bg-[#1a1a2e] border border-gray-800"
+                  maskColor="rgba(15, 15, 26, 0.8)"
+                  nodeColor={(node) => {
+                    const nodeType = (node.data as { nodeType?: string })?.nodeType || '';
+                    const category = nodeType.split('.')[0] || 'utility';
+                    const colors: Record<string, string> = {
+                      trigger: '#22c55e',
+                      http: '#3b82f6',
+                      transform: '#a855f7',
+                      logic: '#f97316',
+                      database: '#06b6d4',
+                      integration: '#ec4899',
+                      utility: '#6b7280',
+                    };
+                    return colors[category] || colors.utility || '#6b7280';
+                  }}
                 />
-              </Panel>
-            )}
+              )}
 
-            {/* Empty state */}
-            {nodes.length === 0 && (
-              <Panel position="top-center" className="mt-16">
-                <div className="rounded-xl bg-[#1e1e2e] border border-gray-700 p-6 text-center shadow-lg">
-                  <div className="mx-auto mb-3 rounded-full bg-primary/20 p-3 w-fit">
-                    <Workflow className="h-6 w-6 text-primary" />
+              {/* Editor toolbar */}
+              {canEdit && (
+                <Panel position="top-left" className="m-2">
+                  <EditorToolbar
+                    onFitView={handleFitView}
+                    onZoomIn={handleZoomIn}
+                    onZoomOut={handleZoomOut}
+                    showMinimap={showMinimap}
+                    onToggleMinimap={() => setShowMinimap(!showMinimap)}
+                  />
+                </Panel>
+              )}
+
+              {/* Empty state */}
+              {nodes.length === 0 && (
+                <Panel position="top-center" className="mt-16">
+                  <div className="rounded-xl bg-[#1e1e2e] border border-gray-700 p-6 text-center shadow-lg">
+                    <div className="mx-auto mb-3 rounded-full bg-primary/20 p-3 w-fit">
+                      <Workflow className="h-6 w-6 text-primary" />
+                    </div>
+                    <h3 className="text-base font-semibold mb-1 text-white">
+                      {canEdit ? 'Commencez votre workflow' : 'Workflow vide'}
+                    </h3>
+                    <p className="text-sm text-gray-400 max-w-xs">
+                      {canEdit
+                        ? 'Glissez-déposez un node depuis la bibliothèque à droite pour démarrer'
+                        : 'Ce workflow ne contient pas encore de nodes'}
+                    </p>
                   </div>
-                  <h3 className="text-base font-semibold mb-1 text-white">
-                    {canEdit ? 'Commencez votre workflow' : 'Workflow vide'}
-                  </h3>
-                  <p className="text-sm text-gray-400 max-w-xs">
-                    {canEdit
-                      ? 'Glissez-déposez un node depuis la bibliothèque à droite pour démarrer'
-                      : 'Ce workflow ne contient pas encore de nodes'}
-                  </p>
-                </div>
-              </Panel>
-            )}
+                </Panel>
+              )}
 
-            {/* Read-only notice */}
-            {!canEdit && (
-              <Panel position="bottom-center" className="mb-4">
-                <div className="flex items-center gap-2 rounded-lg bg-amber-900/50 border border-amber-700/50 px-4 py-2">
-                  <Eye className="h-4 w-4 text-amber-400" />
-                  <span className="text-sm text-amber-200">
-                    Vous consultez ce workflow en mode {guestSession.permission === 'VIEW' ? 'lecture seule' : 'commentaire'}
-                  </span>
-                </div>
-              </Panel>
-            )}
+              {/* Read-only notice */}
+              {!canEdit && (
+                <Panel position="bottom-center" className="mb-4">
+                  <div className="flex items-center gap-2 rounded-lg bg-amber-900/50 border border-amber-700/50 px-4 py-2">
+                    <Eye className="h-4 w-4 text-amber-400" />
+                    <span className="text-sm text-amber-200">
+                      Vous consultez ce workflow en mode {guestSession.permission === 'VIEW' ? 'lecture seule' : 'commentaire'}
+                    </span>
+                  </div>
+                </Panel>
+              )}
 
-            {/* Collaborator cursors */}
-            {isConnected && (
-              <CollaboratorCursors
-                currentUserId={guestSession.id}
-                externalCursors={collaborators
-                  .filter((c) => c.cursor && c.id !== guestSession.id)
-                  .map((c) => ({
-                    userId: c.id,
-                    name: c.name,
-                    color: c.color,
-                    position: c.cursor!,
-                  }))}
-              />
-            )}
-          </ReactFlow>
+              {/* Collaborator cursors */}
+              {isConnected && (
+                <CollaboratorCursors
+                  currentUserId={guestSession.id}
+                  externalCursors={collaborators
+                    .filter((c) => c.cursor && c.id !== guestSession.id)
+                    .map((c) => ({
+                      userId: c.id,
+                      name: c.name,
+                      color: c.color,
+                      position: c.cursor!,
+                    }))}
+                />
+              )}
+            </ReactFlow>
+          </div>
+
+          {/* Bottom panels */}
+          {hasBottomPanel && canEdit && (
+            <div className="h-52 shrink-0 flex flex-col bg-[#1a1a2e] border-t border-gray-800">
+              {/* Tab header */}
+              <div className="flex h-9 shrink-0 items-center justify-between border-b border-gray-800 px-2">
+                <div className="flex items-center gap-1">
+                  {layout.showConsole && (
+                    <button
+                      onClick={() => setActiveBottomTab('console')}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                        layout.activeBottomTab === 'console'
+                          ? 'bg-gray-700 text-white'
+                          : 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
+                      )}
+                    >
+                      <Terminal className="h-3.5 w-3.5" />
+                      Console
+                    </button>
+                  )}
+                  {layout.showExecution && (
+                    <button
+                      onClick={() => setActiveBottomTab('execution')}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                        layout.activeBottomTab === 'execution'
+                          ? 'bg-gray-700 text-white'
+                          : 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
+                      )}
+                    >
+                      <Bug className="h-3.5 w-3.5" />
+                      Exécution
+                    </button>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-gray-400 hover:text-white"
+                  onClick={() => {
+                    if (layout.activeBottomTab === 'console') {
+                      togglePanel('showConsole');
+                    } else {
+                      togglePanel('showExecution');
+                    }
+                  }}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+
+              {/* Panel content */}
+              <div className="flex-1 overflow-hidden min-h-0">
+                {layout.activeBottomTab === 'console' && layout.showConsole && (
+                  <DebugConsole embedded className="h-full" />
+                )}
+                {layout.activeBottomTab === 'execution' && layout.showExecution && guestSession && (
+                  <ExecutionPanel
+                    embedded
+                    className="h-full"
+                    workflowId={guestSession.workflowId}
+                    nodes={nodes.map(n => ({ id: n.id, data: { label: String((n.data as Record<string, unknown>).label || ''), nodeType: String((n.data as Record<string, unknown>).nodeType || '') } }))}
+                    onNodeHighlight={handleNodeHighlight}
+                    guestSessionId={guestSession.id}
+                  />
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Right panel - Library (only for EDIT mode) */}
-        {canEdit && showLibrary && (
+        {/* Right panels */}
+        {hasRightPanel && canEdit && (
           <div className="w-72 shrink-0 flex flex-col bg-[#1a1a2e] border-l border-gray-800">
-            <div className="flex h-9 shrink-0 items-center justify-between border-b border-gray-800 px-3">
-              <div className="flex items-center gap-2 text-white">
-                <BookOpen className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium">Nodes</span>
+            {/* Library panel */}
+            {layout.showLibrary && (
+              <div className={cn(
+                "flex flex-col overflow-hidden",
+                layout.showInspector ? "flex-1 min-h-0" : "h-full"
+              )}>
+                <div className="flex h-9 shrink-0 items-center justify-between border-b border-gray-800 px-3">
+                  <div className="flex items-center gap-2 text-white">
+                    <BookOpen className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">Nodes</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-gray-400 hover:text-white"
+                    onClick={() => togglePanel('showLibrary')}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <div className="flex-1 overflow-auto min-h-0">
+                  <LibraryPanel
+                    onAddNode={handleAddNode}
+                    embedded
+                    className="h-full"
+                  />
+                </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-gray-400 hover:text-white"
-                onClick={() => setShowLibrary(false)}
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-            <div className="flex-1 overflow-auto min-h-0">
-              <LibraryPanel
-                onAddNode={handleAddNode}
-                embedded
-                className="h-full"
-              />
-            </div>
+            )}
+
+            {/* Separator */}
+            {layout.showLibrary && layout.showInspector && (
+              <div className="h-px bg-gray-700 shrink-0" />
+            )}
+
+            {/* Inspector panel */}
+            {layout.showInspector && (
+              <div className={cn(
+                "flex flex-col overflow-hidden",
+                layout.showLibrary ? "h-[280px] shrink-0" : "h-full"
+              )}>
+                <div className="flex h-9 shrink-0 items-center justify-between border-b border-gray-800 px-3">
+                  <div className="flex items-center gap-2 text-white">
+                    <Eye className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">Inspecteur</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-gray-400 hover:text-white"
+                    onClick={() => togglePanel('showInspector')}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <div className="flex-1 overflow-auto min-h-0">
+                  <DataInspector
+                    nodeId={inspectedNodeId}
+                    embedded
+                    className="h-full"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Node Edit Modal (for EDIT mode) */}
+      {/* Node Edit Modal */}
       {canEdit && (
         <NodeEditModal
           nodeId={editingNodeId}
@@ -707,10 +981,20 @@ function GuestEditorContent() {
             setEditingNodeId(null);
           }}
           onDelete={handleDeleteNode}
-          workflowVariables={[]}
+          workflowVariables={workflowVariables}
           externalNodes={nodes as WorkflowNode[]}
           externalEdges={edges}
           onExternalUpdateNode={handleUpdateNode}
+        />
+      )}
+
+      {/* Variables Panel */}
+      {canEdit && (
+        <WorkflowVariablesPanel
+          isOpen={isVariablesPanelOpen}
+          onClose={() => setIsVariablesPanelOpen(false)}
+          variables={workflowVariables}
+          readOnly
         />
       )}
     </div>
