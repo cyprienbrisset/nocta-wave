@@ -12,7 +12,7 @@ import { RedisService } from '../../database/redis.service';
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: '*',
     credentials: true,
   },
   namespace: '/executions',

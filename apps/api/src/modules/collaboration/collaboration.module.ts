@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 
@@ -23,11 +23,13 @@ import { CollaborationLinkController } from './collaboration-link.controller';
 // Dependencies
 import { TeamModule } from '../team/team.module';
 import { DatabaseModule } from '../../database/database.module';
+import { ExecutionModule } from '../execution/execution.module';
 
 @Module({
   imports: [
     TeamModule,
     DatabaseModule,
+    forwardRef(() => ExecutionModule),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

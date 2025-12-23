@@ -45,11 +45,30 @@ class CollaborationSocket {
         return;
       }
 
+      // Disconnect existing socket if any
+      if (this.socket) {
+        this.socket.disconnect();
+        this.socket = null;
+      }
+
       // Remove /api suffix if present since socket namespace is at root
-      let apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4001';
+      // Use window location as fallback for client-side
+      let apiUrl = process.env.NEXT_PUBLIC_API_URL ||
+        (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:4001` : 'http://localhost:4001');
       apiUrl = apiUrl.replace(/\/api$/, '');
 
       console.log('[Collaboration] Connecting to:', `${apiUrl}/collaboration`);
+
+      let resolved = false;
+
+      // Timeout for connection
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          console.error('[Collaboration] Connection timeout');
+          reject(new Error('Connection timeout'));
+        }
+      }, 10000);
 
       this.socket = io(`${apiUrl}/collaboration`, {
         auth,
@@ -58,9 +77,13 @@ class CollaborationSocket {
         reconnectionAttempts: this.maxReconnectAttempts,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
+        timeout: 10000,
       }) as AnySocket;
 
       this.socket.on('connect', () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeout);
         console.log('[Collaboration] Connected');
         this.reconnectAttempts = 0;
         resolve();
@@ -71,10 +94,12 @@ class CollaborationSocket {
       });
 
       this.socket.on('connect_error', (error) => {
-        console.error('[Collaboration] Connection error:', error);
+        console.error('[Collaboration] Connection error:', error.message);
         this.reconnectAttempts++;
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-          reject(new Error('Failed to connect after maximum attempts'));
+        if (!resolved && this.reconnectAttempts >= this.maxReconnectAttempts) {
+          resolved = true;
+          clearTimeout(timeout);
+          reject(new Error(`Failed to connect: ${error.message}`));
         }
       });
 
@@ -83,7 +108,8 @@ class CollaborationSocket {
       });
 
       // Re-emit all registered listeners on reconnect
-      this.socket.on('connect', () => {
+      this.socket.io.on('reconnect', () => {
+        console.log('[Collaboration] Reconnected');
         this.reattachListeners();
       });
     });

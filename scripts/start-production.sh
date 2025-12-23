@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# WS-Flows Start Script
-# This script sets up and starts the entire application
+# WS-Flows Production Start Script
+# This script builds and starts the application in production mode
 
 set -e
 
@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}"
 echo "╔═══════════════════════════════════════════════════════════╗"
-echo "║                     WS-Flows Starter                      ║"
+echo "║                 WS-Flows Production Mode                  ║"
 echo "║            Workflow Automation Platform                   ║"
 echo "║                                                           ║"
 echo "║         Services: API • Web • PostgreSQL • Redis          ║"
@@ -30,7 +30,7 @@ cd "$ROOT_DIR"
 
 # Check for required tools
 check_requirements() {
-    echo -e "${YELLOW}[1/5] Checking requirements...${NC}"
+    echo -e "${YELLOW}[1/6] Checking requirements...${NC}"
 
     if ! command -v node &> /dev/null; then
         echo -e "${RED}Error: Node.js is not installed${NC}"
@@ -60,49 +60,33 @@ check_requirements() {
 
 # Setup environment file
 setup_env() {
-    echo -e "${YELLOW}[2/5] Setting up environment...${NC}"
+    echo -e "${YELLOW}[2/6] Setting up environment...${NC}"
 
     if [ ! -f ".env" ]; then
-        echo -e "  Creating .env file with secure secrets..."
-        cp .env.example .env
-
-        # Generate random secrets
-        JWT_SECRET=$(openssl rand -base64 64 | tr -d '\n')
-        REFRESH_TOKEN_SECRET=$(openssl rand -base64 64 | tr -d '\n')
-        ENCRYPTION_KEY=$(openssl rand -hex 32)
-
-        # Update .env with generated secrets
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            # macOS
-            sed -i '' "s/your-jwt-secret-min-32-chars/$JWT_SECRET/" .env
-            sed -i '' "s/your-refresh-token-secret-min-32-chars/$REFRESH_TOKEN_SECRET/" .env
-            sed -i '' "s/your-encryption-key-min-32-chars/$ENCRYPTION_KEY/" .env
-        else
-            # Linux
-            sed -i "s/your-jwt-secret-min-32-chars/$JWT_SECRET/" .env
-            sed -i "s/your-refresh-token-secret-min-32-chars/$REFRESH_TOKEN_SECRET/" .env
-            sed -i "s/your-encryption-key-min-32-chars/$ENCRYPTION_KEY/" .env
-        fi
-
-        echo -e "  ${GREEN}✓${NC} Environment file created with secure secrets"
-    else
-        echo -e "  ${GREEN}✓${NC} Environment file already exists"
+        echo -e "${RED}Error: .env file not found. Run start.sh first to create it.${NC}"
+        exit 1
     fi
+
+    # Set NODE_ENV to production
+    export NODE_ENV=production
+
+    echo -e "  ${GREEN}✓${NC} Environment file exists"
+    echo -e "  ${GREEN}✓${NC} NODE_ENV=production"
     echo -e "${GREEN}✓ Environment ready${NC}"
     echo ""
 }
 
 # Install dependencies
 install_deps() {
-    echo -e "${YELLOW}[3/5] Installing dependencies...${NC}"
-    pnpm install
+    echo -e "${YELLOW}[3/6] Installing dependencies...${NC}"
+    pnpm install --frozen-lockfile 2>/dev/null || pnpm install
     echo -e "${GREEN}✓ Dependencies installed${NC}"
     echo ""
 }
 
 # Start Docker services
 start_docker() {
-    echo -e "${YELLOW}[4/5] Starting Docker services...${NC}"
+    echo -e "${YELLOW}[4/6] Starting Docker services...${NC}"
 
     echo -e "  Starting PostgreSQL and Redis..."
     docker compose -f docker/docker-compose.yml up -d postgres redis
@@ -132,7 +116,7 @@ start_docker() {
 
 # Setup database
 setup_database() {
-    echo -e "${YELLOW}[5/5] Setting up database...${NC}"
+    echo -e "${YELLOW}[5/6] Setting up database...${NC}"
 
     # Copy .env to apps/api for Prisma to find it
     cp "$ROOT_DIR/.env" "$ROOT_DIR/apps/api/.env"
@@ -149,14 +133,32 @@ setup_database() {
 
     # Seed database
     echo -e "  Seeding database (admin user, tags, templates)..."
-    pnpm db:seed || echo -e "  ${YELLOW}Seed skipped (already applied)${NC}"
+    pnpm db:seed 2>/dev/null || echo -e "  ${YELLOW}Seed skipped (already applied)${NC}"
 
     cd "$ROOT_DIR"
     echo -e "${GREEN}✓ Database ready${NC}"
     echo ""
 }
 
-# Start all services
+# Build for production
+build_production() {
+    echo -e "${YELLOW}[6/6] Building for production...${NC}"
+
+    echo -e "  Building shared packages..."
+    pnpm --filter @ws-flows/shared build 2>/dev/null || true
+    pnpm --filter @ws-flows/nodes build 2>/dev/null || true
+
+    echo -e "  Building API..."
+    pnpm --filter @ws-flows/api build
+
+    echo -e "  Building Web (this may take a moment)..."
+    pnpm --filter @ws-flows/web build
+
+    echo -e "${GREEN}✓ Production build complete${NC}"
+    echo ""
+}
+
+# Start all services in production mode
 start_services() {
     # Get local IP address for network access
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -182,21 +184,35 @@ start_services() {
     echo -e "${CYAN}║${NC}  ${YELLOW}Email${NC}:    admin@wsflows.local                           ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}  ${YELLOW}Password${NC}: admin123                                      ${CYAN}║${NC}"
     echo -e "${CYAN}╠═══════════════════════════════════════════════════════════╣${NC}"
-    echo -e "${CYAN}║${NC}                  Worker Configuration                      ${CYAN}║${NC}"
-    echo -e "${CYAN}╠═══════════════════════════════════════════════════════════╣${NC}"
-    echo -e "${CYAN}║${NC}  Internal workflow engine: ${GREEN}enabled${NC}                       ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  Concurrent workers: ${GREEN}10${NC} (WORKER_CONCURRENCY)             ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}  Batch size: ${GREEN}5${NC} (WORKER_BATCH_SIZE)                       ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}                       ${GREEN}PRODUCTION MODE${NC}                       ${CYAN}║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "${YELLOW}Note:${NC} Change the admin password after first login!"
     echo ""
-    echo -e "${GREEN}Starting development servers (API + Web)...${NC}"
-    echo -e "${BLUE}The internal workflow worker is integrated in the API server.${NC}"
+    echo -e "${GREEN}Starting production servers (API + Web)...${NC}"
     echo ""
 
-    # Start all services (API, Web) - worker is integrated in API
-    pnpm dev
+    # Start API in background
+    cd "$ROOT_DIR/apps/api"
+    NODE_ENV=production node dist/main.js &
+    API_PID=$!
+    echo -e "  ${GREEN}✓${NC} API started (PID: $API_PID)"
+
+    # Start Web in production mode
+    cd "$ROOT_DIR/apps/web"
+    NODE_ENV=production pnpm start -p 4000 -H 0.0.0.0 &
+    WEB_PID=$!
+    echo -e "  ${GREEN}✓${NC} Web started (PID: $WEB_PID)"
+
+    cd "$ROOT_DIR"
+
+    echo ""
+    echo -e "${GREEN}All services are running in production mode.${NC}"
+    echo -e "${YELLOW}Press Ctrl+C to stop all services.${NC}"
+    echo ""
+
+    # Wait for processes
+    wait
 }
 
 # Main execution
@@ -206,6 +222,7 @@ main() {
     install_deps
     start_docker
     setup_database
+    build_production
     start_services
 }
 
@@ -213,11 +230,15 @@ main() {
 cleanup() {
     echo ""
     echo -e "${YELLOW}Shutting down services...${NC}"
+
+    # Kill background processes
+    jobs -p | xargs -r kill 2>/dev/null || true
+
     cd "$ROOT_DIR"
     docker compose -f docker/docker-compose.yml stop postgres redis
     echo -e "${GREEN}✓ Cleanup complete${NC}"
 }
 
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
 
 main

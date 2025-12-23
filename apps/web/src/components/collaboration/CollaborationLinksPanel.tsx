@@ -176,10 +176,32 @@ export function CollaborationLinksPanel({
 
   const copyLink = async (link: CollaborationLink) => {
     const url = `${window.location.origin}/collaborate/${link.token}`;
-    await navigator.clipboard.writeText(url);
-    setCopiedId(link.id);
-    toast({ title: 'Lien copié !' });
-    setTimeout(() => setCopiedId(null), 2000);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        // Fallback for non-secure contexts
+        const textArea = document.createElement('textarea');
+        textArea.value = url;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+      }
+      setCopiedId(link.id);
+      toast({ title: 'Lien copié !' });
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (error) {
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de copier le lien',
+        variant: 'destructive'
+      });
+    }
   };
 
   const onSubmit = (data: CreateLinkForm) => {
@@ -422,6 +444,15 @@ function LinkCard({
           </Button>
         )}
       </div>
+
+      {/* Link URL */}
+      {!isInactive && (
+        <div className="bg-gray-900 rounded px-3 py-2 border border-gray-700">
+          <code className="text-xs text-gray-300 break-all select-all">
+            {typeof window !== 'undefined' ? `${window.location.origin}/collaborate/${link.token}` : `/collaborate/${link.token}`}
+          </code>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="flex items-center gap-4 text-xs text-gray-500">

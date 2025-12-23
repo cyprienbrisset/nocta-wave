@@ -6,9 +6,10 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Enable CORS
+  // Enable CORS - allow all origins for local network access
+  const corsOrigin = process.env.CORS_ORIGIN;
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:4000',
+    origin: corsOrigin === '*' ? true : (corsOrigin || 'http://localhost:4000'),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
@@ -49,10 +50,11 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, document);
 
   const port = process.env.PORT || 3001;
-  await app.listen(port);
+  const host = process.env.HOST || '0.0.0.0';
+  await app.listen(port, host);
 
-  console.log(`🚀 WS-Flows API running on http://localhost:${port}`);
-  console.log(`📚 Swagger docs available at http://localhost:${port}/docs`);
+  console.log(`🚀 WS-Flows API running on http://${host}:${port}`);
+  console.log(`📚 Swagger docs available at http://${host}:${port}/docs`);
 }
 
 bootstrap();

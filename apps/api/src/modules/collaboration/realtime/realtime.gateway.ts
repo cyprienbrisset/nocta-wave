@@ -39,7 +39,7 @@ import { CollaborationLinkService } from '../collaboration-link.service';
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: '*',
     credentials: true,
   },
   namespace: '/collaboration',

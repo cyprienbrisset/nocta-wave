@@ -333,4 +333,85 @@ export class ExecutionService {
       data: updateData,
     });
   }
+
+  /**
+   * Trigger a workflow execution as a guest
+   */
+  async triggerAsGuest(
+    workflowId: string,
+    guestName: string,
+    guestSessionId: string,
+    inputData?: Record<string, any>,
+  ) {
+    const workflow = await this.prisma.workflow.findUnique({
+      where: { id: workflowId },
+      include: { team: true },
+    });
+
+    if (!workflow) {
+      throw new NotFoundException('Workflow not found');
+    }
+
+    // Create execution record with guest info
+    const execution = await this.prisma.execution.create({
+      data: {
+        workflowId,
+        triggerType: 'MANUAL',
+        status: 'PENDING',
+        inputData: {
+          ...inputData,
+          _guestContext: {
+            guestName,
+            guestSessionId,
+          },
+        },
+      },
+    });
+
+    // Queue the execution job
+    await this.redis.lpush('workflow:executions', {
+      executionId: execution.id,
+      workflowId,
+      teamId: workflow.teamId,
+      graph: workflow.graph,
+      inputData,
+      settings: workflow.settings,
+    });
+
+    // Publish event for real-time updates
+    await this.redis.publish('execution:started', {
+      executionId: execution.id,
+      workflowId,
+      teamId: workflow.teamId,
+    });
+
+    return execution;
+  }
+
+  /**
+   * List executions for a workflow without user auth check (for guests)
+   */
+  async findByWorkflowPublic(
+    workflowId: string,
+    options: { limit?: number } = {},
+  ) {
+    const executions = await this.prisma.execution.findMany({
+      where: { workflowId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        nodeLogs: {
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: options.limit || 10,
+    });
+
+    return { data: executions };
+  }
 }

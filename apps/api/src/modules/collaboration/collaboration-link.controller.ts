@@ -8,17 +8,22 @@ import {
   Query,
   UseGuards,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Public } from '../auth/decorators/public.decorator';
 import { CollaborationLinkService, CreateLinkDto } from './collaboration-link.service';
 import { CollaborationPermission } from '@prisma/client';
+import { ExecutionService } from '../execution/execution.service';
 
 @ApiTags('Collaboration Links')
 @Controller('collaboration-links')
 export class CollaborationLinkController {
-  constructor(private linkService: CollaborationLinkService) {}
+  constructor(
+    private linkService: CollaborationLinkService,
+    private executionService: ExecutionService,
+  ) {}
 
   @Post()
   @ApiBearerAuth()
@@ -89,5 +94,56 @@ export class CollaborationLinkController {
   @ApiOperation({ summary: 'Get workflow data for a guest session' })
   async getWorkflowForGuest(@Param('sessionId') sessionId: string) {
     return this.linkService.getWorkflowForGuest(sessionId);
+  }
+
+  @Post('guest/:sessionId/trigger')
+  @Public()
+  @ApiOperation({ summary: 'Trigger workflow execution as guest (EDIT permission required)' })
+  async triggerAsGuest(
+    @Param('sessionId') sessionId: string,
+    @Body() body: { inputData?: Record<string, any> },
+  ) {
+    // Verify guest session and permission
+    const session = await this.linkService.getGuestSession(sessionId);
+    if (!session || !session.isActive) {
+      throw new ForbiddenException('Invalid or inactive guest session');
+    }
+    if (session.link.permission !== 'EDIT') {
+      throw new ForbiddenException('EDIT permission required to trigger executions');
+    }
+
+    // Get workflow owner to use as user context
+    const workflowData = await this.linkService.getWorkflowForGuest(sessionId);
+
+    // Trigger execution with guest context
+    return this.executionService.triggerAsGuest(
+      workflowData.workflow.id,
+      session.guestName,
+      sessionId,
+      body.inputData,
+    );
+  }
+
+  @Get('guest/:sessionId/executions')
+  @Public()
+  @ApiOperation({ summary: 'Get executions for a guest session (EDIT permission required)' })
+  async getGuestExecutions(
+    @Param('sessionId') sessionId: string,
+    @Query('limit') limit?: string,
+  ) {
+    // Verify guest session and permission
+    const session = await this.linkService.getGuestSession(sessionId);
+    if (!session || !session.isActive) {
+      throw new ForbiddenException('Invalid or inactive guest session');
+    }
+    if (session.link.permission !== 'EDIT') {
+      throw new ForbiddenException('EDIT permission required to view executions');
+    }
+
+    const workflowData = await this.linkService.getWorkflowForGuest(sessionId);
+    return this.executionService.findByWorkflowPublic(
+      workflowData.workflow.id,
+      { limit: limit ? parseInt(limit, 10) : 10 },
+    );
   }
 }

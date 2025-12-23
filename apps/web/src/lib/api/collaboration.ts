@@ -381,4 +381,27 @@ export const collaborationLinksApi = {
   async deactivate(linkId: string): Promise<void> {
     await api.post(`/collaboration-links/${linkId}/deactivate`);
   },
+
+  async triggerAsGuest(sessionId: string, inputData?: Record<string, any>): Promise<any> {
+    const response = await fetch(`${API_URL}/collaboration-links/guest/${sessionId}/trigger`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inputData }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || 'Impossible de lancer l\'exécution');
+    }
+    return response.json();
+  },
+
+  async getGuestExecutions(sessionId: string, limit?: number): Promise<{ data: any[] }> {
+    const query = limit ? `?limit=${limit}` : '';
+    const response = await fetch(`${API_URL}/collaboration-links/guest/${sessionId}/executions${query}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || 'Impossible de charger les exécutions');
+    }
+    return response.json();
+  },
 };

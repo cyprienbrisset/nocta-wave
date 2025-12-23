@@ -623,14 +623,19 @@ function WorkflowEditorContent() {
 
   const handleMouseMove = useCallback(
     (event: React.MouseEvent) => {
-      // Convert screen coordinates to flow coordinates
-      const bounds = event.currentTarget.getBoundingClientRect();
-      const viewport = reactFlowInstance.getViewport();
-      const x = (event.clientX - bounds.left - viewport.x) / viewport.zoom;
-      const y = (event.clientY - bounds.top - viewport.y) / viewport.zoom;
-      trackCursor({ x, y });
+      if (!isCollaborationConnected) return;
+      try {
+        // Convert screen coordinates to flow coordinates
+        const bounds = event.currentTarget.getBoundingClientRect();
+        const viewport = reactFlowInstance.getViewport();
+        const x = (event.clientX - bounds.left - viewport.x) / viewport.zoom;
+        const y = (event.clientY - bounds.top - viewport.y) / viewport.zoom;
+        trackCursor({ x, y });
+      } catch (error) {
+        // Silently ignore if viewport is not ready
+      }
     },
-    [reactFlowInstance, trackCursor]
+    [reactFlowInstance, trackCursor, isCollaborationConnected]
   );
 
   if (isLoading) {
