@@ -94,7 +94,61 @@ export class DeadLetterQueueService {
   }
 
   /**
-   * Retry a DLQ entry
+   * Retry a DLQ entry with team access validation
+   */
+  async retryEntryWithTeamCheck(
+    entryId: string,
+    teamId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const entry = await this.prisma.deadLetterQueue.findFirst({
+      where: { id: entryId, teamId },
+    });
+
+    if (!entry) {
+      return { success: false, message: 'DLQ entry not found or access denied' };
+    }
+
+    return this.retryEntry(entryId);
+  }
+
+  /**
+   * Discard a DLQ entry with team access validation
+   */
+  async discardEntryWithTeamCheck(entryId: string, teamId: string): Promise<{ success: boolean; message: string }> {
+    const entry = await this.prisma.deadLetterQueue.findFirst({
+      where: { id: entryId, teamId },
+    });
+
+    if (!entry) {
+      return { success: false, message: 'DLQ entry not found or access denied' };
+    }
+
+    await this.discardEntry(entryId);
+    return { success: true, message: 'Entry discarded' };
+  }
+
+  /**
+   * Mark entry as resolved with team access validation
+   */
+  async markResolvedWithTeamCheck(
+    entryId: string,
+    teamId: string,
+    resolvedBy: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const entry = await this.prisma.deadLetterQueue.findFirst({
+      where: { id: entryId, teamId },
+    });
+
+    if (!entry) {
+      return { success: false, message: 'DLQ entry not found or access denied' };
+    }
+
+    await this.markResolved(entryId, resolvedBy);
+    return { success: true, message: 'Entry marked as resolved' };
+  }
+
+  /**
+   * Retry a DLQ entry (internal use - no team check)
    */
   async retryEntry(entryId: string): Promise<{ success: boolean; message: string }> {
     const entry = await this.prisma.deadLetterQueue.findUnique({

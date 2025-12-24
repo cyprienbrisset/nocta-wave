@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../database/prisma.service';
 import { RedisService } from '../database/redis.service';
 import { EncryptionService } from '../modules/credential/encryption.service';
+import { ExecutionLogStorageService } from '../modules/storage/execution-log-storage.service';
+import { RedactionService } from '../modules/security/redaction.service';
 import { getNode } from '@ws-flows/nodes';
 import { topologicalSort } from '@ws-flows/shared';
 import type { WorkflowGraph, NodeContext } from '@ws-flows/shared';
@@ -131,6 +133,8 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
     private redis: RedisService,
     private encryption: EncryptionService,
     private configService: ConfigService,
+    private logStorage: ExecutionLogStorageService,
+    private redaction: RedactionService,
   ) {
     // Load configuration with defaults optimized for high throughput
     this.concurrentWorkers = this.configService.get<number>('WORKER_CONCURRENCY', 10);
@@ -723,6 +727,16 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
       throw new Error(`Circuit breaker open for ${nodeType}`);
     }
 
+    // Redact sensitive data before storing (SECURITY: prevents secrets in logs)
+    const redactedInputData = this.redaction.redactQuick(node.data?.config || {});
+
+    // Store input data (may be externalized for large payloads)
+    const inputStorageResult = await this.logStorage.storeLogData(
+      executionId,
+      node.id,
+      { inputData: redactedInputData },
+    );
+
     const executionLog = await this.prisma.executionLog.create({
       data: {
         executionId,
@@ -730,7 +744,8 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
         nodeType,
         nodeName: node.data?.label || node.id,
         status: 'RUNNING',
-        inputData: (node.data?.config || {}) as any,
+        inputData: inputStorageResult.inputData as any,
+        inputDataRef: inputStorageResult.inputDataRef as any,
       },
     });
 
@@ -806,11 +821,22 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
 
       const nodeDuration = Date.now() - nodeStartTime;
 
+      // Redact sensitive data before storing (SECURITY: prevents secrets in logs)
+      const redactedOutputData = this.redaction.redactQuick(result.data);
+
+      // Store output data (may be externalized for large payloads)
+      const outputStorageResult = await this.logStorage.storeLogData(
+        executionId,
+        node.id,
+        { outputData: redactedOutputData },
+      );
+
       await this.prisma.executionLog.update({
         where: { id: executionLog.id },
         data: {
           status: 'COMPLETED',
-          outputData: result.data as any,
+          outputData: outputStorageResult.outputData as any,
+          outputDataRef: outputStorageResult.outputDataRef as any,
           finishedAt: new Date(),
           duration: nodeDuration,
         },
@@ -820,7 +846,7 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
         executionId,
         nodeId: node.id,
         nodeName: node.data?.label,
-        outputData: result.data,
+        outputData: result.data, // Send full data for real-time updates
         duration: nodeDuration,
       });
 
@@ -845,11 +871,18 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
           __rawOutput: subWorkflowResult,
         });
 
-        // Update log with sub-workflow result
+        // Update log with sub-workflow result (may be externalized)
+        const subOutputStorage = await this.logStorage.storeLogData(
+          executionId,
+          node.id,
+          { outputData: subWorkflowResult },
+        );
+
         await this.prisma.executionLog.update({
           where: { id: executionLog.id },
           data: {
-            outputData: subWorkflowResult as any,
+            outputData: subOutputStorage.outputData as any,
+            outputDataRef: subOutputStorage.outputDataRef as any,
           },
         });
       }
@@ -895,11 +928,19 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
           __rawOutput: { error: errorMessage },
         });
 
+        // Store error output (typically small, stored inline)
+        const errorOutputStorage = await this.logStorage.storeLogData(
+          executionId,
+          node.id,
+          { outputData: { error: errorMessage } },
+        );
+
         await this.prisma.executionLog.update({
           where: { id: executionLog.id },
           data: {
             status: 'COMPLETED',
-            outputData: { error: errorMessage } as any,
+            outputData: errorOutputStorage.outputData as any,
+            outputDataRef: errorOutputStorage.outputDataRef as any,
             finishedAt: new Date(),
             duration: nodeDuration,
           },

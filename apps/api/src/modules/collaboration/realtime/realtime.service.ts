@@ -6,9 +6,21 @@ import {
   CursorPosition,
   ViewportState,
   REDIS_KEYS,
+  REDIS_TTL,
   getCollaboratorColor,
 } from './realtime.interfaces';
 
+/**
+ * RealtimeService - Manages real-time collaboration sessions
+ *
+ * PERFORMANCE OPTIMIZATION:
+ * Cursor and viewport data is now stored in Redis only (not PostgreSQL).
+ * This eliminates expensive database writes on every mouse move.
+ *
+ * Data storage strategy:
+ * - PostgreSQL: Persistent session metadata (connect/disconnect times, colors)
+ * - Redis: Ephemeral data (cursor positions, viewport state, typing status)
+ */
 @Injectable()
 export class RealtimeService {
   private readonly logger = new Logger(RealtimeService.name);
@@ -75,7 +87,7 @@ export class RealtimeService {
     // Map socket to user
     await client.set(REDIS_KEYS.userSocket(userId), socketId);
 
-    // Create or update database session
+    // Create or update database session (persistent metadata only)
     await this.prisma.workflowSession.upsert({
       where: {
         workflowId_socketId: { workflowId, socketId },
@@ -115,14 +127,16 @@ export class RealtimeService {
     if (collaboratorJson) {
       const collaborator = JSON.parse(collaboratorJson) as CollaboratorInfo;
 
-      // Remove from Redis
+      // Remove from Redis (all ephemeral data)
       await client.hdel(REDIS_KEYS.workflowUsers(workflowId), socketId);
       await client.del(REDIS_KEYS.userSocket(collaborator.id));
+      await client.del(REDIS_KEYS.userCursor(socketId));
+      await client.del(REDIS_KEYS.userViewport(socketId));
 
       // Remove from typing set
       await client.srem(REDIS_KEYS.workflowTyping(workflowId), collaborator.id);
 
-      // Update database session
+      // Update database session (persistent metadata)
       await this.prisma.workflowSession.updateMany({
         where: { workflowId, socketId },
         data: {
@@ -146,40 +160,71 @@ export class RealtimeService {
   }
 
   /**
-   * Update cursor position for a user
+   * Update cursor position for a user (Redis only - no DB writes)
+   * PERFORMANCE: This eliminates database writes on every mouse move
    */
   async updateCursor(
     workflowId: string,
     socketId: string,
     position: CursorPosition,
   ): Promise<void> {
-    await this.prisma.workflowSession.updateMany({
-      where: { workflowId, socketId, isActive: true },
-      data: {
-        cursorX: position.x,
-        cursorY: position.y,
-        lastHeartbeat: new Date(),
-      },
-    });
+    const client = this.redis.getClient();
+
+    // Store cursor in Redis with TTL (no database write!)
+    await client.setex(
+      REDIS_KEYS.userCursor(socketId),
+      REDIS_TTL.cursor,
+      JSON.stringify({ ...position, workflowId, updatedAt: Date.now() }),
+    );
   }
 
   /**
-   * Update viewport state for a user
+   * Get cursor position for a user
+   */
+  async getCursor(socketId: string): Promise<CursorPosition | null> {
+    const client = this.redis.getClient();
+    const data = await client.get(REDIS_KEYS.userCursor(socketId));
+
+    if (data) {
+      const parsed = JSON.parse(data);
+      return { x: parsed.x, y: parsed.y };
+    }
+
+    return null;
+  }
+
+  /**
+   * Update viewport state for a user (Redis only - no DB writes)
+   * PERFORMANCE: This eliminates database writes on every viewport change
    */
   async updateViewport(
     workflowId: string,
     socketId: string,
     viewport: ViewportState,
   ): Promise<void> {
-    await this.prisma.workflowSession.updateMany({
-      where: { workflowId, socketId, isActive: true },
-      data: {
-        viewportX: viewport.x,
-        viewportY: viewport.y,
-        viewportZoom: viewport.zoom,
-        lastHeartbeat: new Date(),
-      },
-    });
+    const client = this.redis.getClient();
+
+    // Store viewport in Redis with TTL (no database write!)
+    await client.setex(
+      REDIS_KEYS.userViewport(socketId),
+      REDIS_TTL.viewport,
+      JSON.stringify({ ...viewport, workflowId, updatedAt: Date.now() }),
+    );
+  }
+
+  /**
+   * Get viewport state for a user
+   */
+  async getViewport(socketId: string): Promise<ViewportState | null> {
+    const client = this.redis.getClient();
+    const data = await client.get(REDIS_KEYS.userViewport(socketId));
+
+    if (data) {
+      const parsed = JSON.parse(data);
+      return { x: parsed.x, y: parsed.y, zoom: parsed.zoom };
+    }
+
+    return null;
   }
 
   /**
@@ -195,8 +240,8 @@ export class RealtimeService {
 
     if (isTyping) {
       await client.sadd(key, userId);
-      // Auto-expire typing status after 10 seconds
-      await client.expire(key, 10);
+      // Auto-expire typing status
+      await client.expire(key, REDIS_TTL.typing);
     } else {
       await client.srem(key, userId);
     }
@@ -221,26 +266,12 @@ export class RealtimeService {
     const client = this.redis.getClient();
     await client.set(REDIS_KEYS.userFollowing(followerId), targetUserId);
 
-    // Get target user's current viewport
-    const session = await this.prisma.workflowSession.findFirst({
-      where: {
-        workflowId,
-        userId: targetUserId,
-        isActive: true,
-      },
-      select: {
-        viewportX: true,
-        viewportY: true,
-        viewportZoom: true,
-      },
-    });
+    // Get target user's socket ID
+    const targetSocketId = await client.get(REDIS_KEYS.userSocket(targetUserId));
 
-    if (session && session.viewportX !== null && session.viewportY !== null && session.viewportZoom !== null) {
-      return {
-        x: session.viewportX,
-        y: session.viewportY,
-        zoom: session.viewportZoom,
-      };
+    if (targetSocketId) {
+      // Get target user's current viewport from Redis
+      return this.getViewport(targetSocketId);
     }
 
     return null;
@@ -284,6 +315,7 @@ export class RealtimeService {
 
   /**
    * Handle heartbeat for keeping sessions alive
+   * Only updates DB periodically to reduce writes
    */
   async heartbeat(workflowId: string, socketId: string): Promise<void> {
     await this.prisma.workflowSession.updateMany({
@@ -308,12 +340,14 @@ export class RealtimeService {
     const client = this.redis.getClient();
 
     for (const session of staleSessions) {
-      // Remove from Redis
+      // Remove from Redis (all ephemeral data)
       await client.hdel(
         REDIS_KEYS.workflowUsers(session.workflowId),
         session.socketId,
       );
       await client.del(REDIS_KEYS.userSocket(session.userId));
+      await client.del(REDIS_KEYS.userCursor(session.socketId));
+      await client.del(REDIS_KEYS.userViewport(session.socketId));
 
       this.logger.warn(`Cleaned up stale session for user ${session.userId}`);
     }
@@ -349,5 +383,82 @@ export class RealtimeService {
     const client = this.redis.getClient();
     const json = await client.hget(REDIS_KEYS.workflowUsers(workflowId), socketId);
     return json ? JSON.parse(json) : null;
+  }
+
+  /**
+   * Get all cursors for a workflow (for initial sync)
+   */
+  async getWorkflowCursors(workflowId: string): Promise<Map<string, CursorPosition>> {
+    const collaborators = await this.getWorkflowCollaborators(workflowId);
+    const cursors = new Map<string, CursorPosition>();
+
+    for (const collab of collaborators) {
+      const cursor = await this.getCursor(collab.socketId);
+      if (cursor) {
+        cursors.set(collab.socketId, cursor);
+      }
+    }
+
+    return cursors;
+  }
+
+  /**
+   * Update guest cursor position (Redis only)
+   */
+  async updateGuestCursor(
+    sessionId: string,
+    position: CursorPosition,
+  ): Promise<void> {
+    const client = this.redis.getClient();
+    await client.setex(
+      REDIS_KEYS.guestCursor(sessionId),
+      REDIS_TTL.cursor,
+      JSON.stringify({ ...position, updatedAt: Date.now() }),
+    );
+  }
+
+  /**
+   * Update guest viewport state (Redis only)
+   */
+  async updateGuestViewport(
+    sessionId: string,
+    viewport: ViewportState,
+  ): Promise<void> {
+    const client = this.redis.getClient();
+    await client.setex(
+      REDIS_KEYS.guestViewport(sessionId),
+      REDIS_TTL.viewport,
+      JSON.stringify({ ...viewport, updatedAt: Date.now() }),
+    );
+  }
+
+  /**
+   * Get guest cursor position
+   */
+  async getGuestCursor(sessionId: string): Promise<CursorPosition | null> {
+    const client = this.redis.getClient();
+    const data = await client.get(REDIS_KEYS.guestCursor(sessionId));
+
+    if (data) {
+      const parsed = JSON.parse(data);
+      return { x: parsed.x, y: parsed.y };
+    }
+
+    return null;
+  }
+
+  /**
+   * Get guest viewport state
+   */
+  async getGuestViewport(sessionId: string): Promise<ViewportState | null> {
+    const client = this.redis.getClient();
+    const data = await client.get(REDIS_KEYS.guestViewport(sessionId));
+
+    if (data) {
+      const parsed = JSON.parse(data);
+      return { x: parsed.x, y: parsed.y, zoom: parsed.zoom };
+    }
+
+    return null;
   }
 }

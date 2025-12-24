@@ -8,7 +8,7 @@ Avant de commencer, assurez-vous d'avoir installé :
 
 | Outil | Version Minimum | Vérification |
 |-------|-----------------|--------------|
-| Node.js | 18+ | `node --version` |
+| Node.js | 20+ | `node --version` |
 | pnpm | 8+ | `pnpm --version` |
 | Docker | 20+ | `docker --version` |
 | Docker Compose | 2+ | `docker compose version` |
@@ -34,7 +34,6 @@ pnpm install
 Cette commande installe les dépendances pour tous les packages :
 - `apps/api` - Backend NestJS
 - `apps/web` - Frontend Next.js
-- `apps/worker` - Worker Trigger.dev
 - `packages/shared` - Types et utilitaires partagés
 - `packages/nodes` - Définitions des nodes
 - `packages/ui` - Composants UI partagés
@@ -49,19 +48,16 @@ cp apps/api/.env.example apps/api/.env
 
 # Frontend
 cp apps/web/.env.example apps/web/.env.local
-
-# Worker
-cp apps/worker/.env.example apps/worker/.env
 ```
 
 #### Variables Backend (`apps/api/.env`)
 
 ```env
 # Base de données
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/wsflows"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5434/wsflows"
 
 # Redis
-REDIS_URL="redis://localhost:6379"
+REDIS_URL="redis://:password@localhost:6380"
 
 # JWT
 JWT_SECRET="votre-secret-jwt-securise"
@@ -70,19 +66,15 @@ JWT_EXPIRES_IN="7d"
 # Encryption (pour les credentials)
 ENCRYPTION_KEY="32-caracteres-hexadecimaux-securises"
 
-# Trigger.dev
-TRIGGER_API_KEY="tr_dev_xxxx"
-TRIGGER_API_URL="http://localhost:3030"
-
 # Port
-PORT=3001
+PORT=4001
 ```
 
 #### Variables Frontend (`apps/web/.env.local`)
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:3001
-NEXT_PUBLIC_WS_URL=http://localhost:3001
+NEXT_PUBLIC_API_URL=http://localhost:4001/api
+NEXT_PUBLIC_WS_URL=ws://localhost:4001
 ```
 
 ### 4. Démarrer les Services Docker
@@ -90,20 +82,20 @@ NEXT_PUBLIC_WS_URL=http://localhost:3001
 Lancez PostgreSQL et Redis via Docker Compose :
 
 ```bash
-docker compose up -d
+docker compose -f docker/docker-compose.yml up -d
 ```
 
 Vérifiez que les services sont actifs :
 
 ```bash
-docker compose ps
+docker compose -f docker/docker-compose.yml ps
 ```
 
 Vous devriez voir :
 ```
 NAME                SERVICE     STATUS
-ws-flows-postgres   postgres    running
-ws-flows-redis      redis       running
+wsflows-postgres    postgres    running
+wsflows-redis       redis       running
 ```
 
 ### 5. Configurer la Base de Données
@@ -137,27 +129,23 @@ pnpm dev:api
 
 # Terminal 2 - Frontend
 pnpm dev:web
-
-# Terminal 3 - Worker Trigger.dev
-pnpm dev:worker
 ```
 
 ### 7. Accéder à l'Application
 
-- **Frontend**: http://localhost:3000
-- **API**: http://localhost:3001
-- **Swagger API Docs**: http://localhost:3001/api/docs
+- **Frontend**: http://localhost:4000
+- **API**: http://localhost:4001
+- **Swagger API Docs**: http://localhost:4001/docs
 - **Prisma Studio**: `pnpm db:studio` puis http://localhost:5555
 
 ## Structure des Ports
 
 | Service | Port | Description |
 |---------|------|-------------|
-| Frontend | 3000 | Application Next.js |
-| API | 3001 | Backend NestJS |
-| Trigger.dev | 3030 | Moteur d'exécution |
-| PostgreSQL | 5432 | Base de données |
-| Redis | 6379 | Cache et sessions |
+| Frontend | 4000 | Application Next.js |
+| API | 4001 | Backend NestJS |
+| PostgreSQL | 5434 | Base de données |
+| Redis | 6380 | Cache et sessions |
 
 ## Commandes Utiles
 
@@ -184,10 +172,10 @@ pnpm db:studio        # Interface visuelle Prisma
 ### Docker
 
 ```bash
-docker compose up -d          # Démarrer les services
-docker compose down           # Arrêter les services
-docker compose logs -f        # Voir les logs
-docker compose ps             # État des services
+docker compose -f docker/docker-compose.yml up -d    # Démarrer les services
+docker compose -f docker/docker-compose.yml down     # Arrêter les services
+docker compose -f docker/docker-compose.yml logs -f  # Voir les logs
+docker compose -f docker/docker-compose.yml ps       # État des services
 ```
 
 ## Dépannage
@@ -196,11 +184,11 @@ docker compose ps             # État des services
 
 ```bash
 # Vérifier que le conteneur est actif
-docker compose ps
+docker compose -f docker/docker-compose.yml ps
 
 # Recréer le conteneur
-docker compose down
-docker compose up -d postgres
+docker compose -f docker/docker-compose.yml down
+docker compose -f docker/docker-compose.yml up -d postgres
 ```
 
 ### Erreur de migration Prisma
@@ -215,7 +203,7 @@ pnpm db:seed
 
 ```bash
 # Trouver le processus
-lsof -i :3000
+lsof -i :4001
 
 # Terminer le processus
 kill -9 <PID>
@@ -240,4 +228,3 @@ Maintenant que WS-Flows est installé, passez à [Créer votre Premier Workflow]
 
 - [Concepts Clés](./concepts.md)
 - [Architecture](../architecture/overview.md)
-- [Configuration Trigger.dev](../guides/trigger-dev-integration.md)

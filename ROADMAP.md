@@ -1,345 +1,163 @@
 # WS-Flows Roadmap
 
-> **Vision**: Devenir la plateforme d'orchestration de workflows la plus innovante et accessible, combinant puissance enterprise et simplicite d'utilisation grace a l'IA.
+Ce document décrit les améliorations prioritaires à apporter au projet pour garantir sa stabilité, sa scalabilité et sa sécurité en production.
 
 ---
 
-## Etat Actuel (v0.1.0) - Decembre 2024
+## 1. Performance et Scalabilité de la Base de Données (Priorité Haute)
 
-### Statistiques
+Le modèle de données actuel risque de saturer PostgreSQL très rapidement en production.
 
-| Categorie | Nodes | Details |
-|-----------|-------|---------|
-| **Triggers** | 8 | Manual, Cron, Webhook, HTTP Poll, Event, File Watch, Database, Queue |
-| **HTTP** | 2 | Request, Response |
-| **Transform** | 8 | Set, Map, Filter, Merge, Split, Aggregate, Sort, Code |
-| **Logic** | 5 | Condition, Switch, Loop, Wait, Stop |
-| **Database** | 11 | PostgreSQL, MySQL, MongoDB, Redis, SQLite, Firebase, Supabase, DynamoDB, Elasticsearch, ClickHouse |
-| **Integrations** | 53+ | Slack, Discord, GitHub, Gmail, Sheets, Notion, Stripe, OpenAI, AWS, Shopify, Twilio, etc. |
-| **Utility** | 8 | Delay, Crypto, DateTime, HTML Parse, Log, Debug, JSON Parse, Error |
-| **Total** | **91+** | |
+### 1.1 Externaliser les logs d'exécution
 
-### Fonctionnalites Implementees
+**Problème actuel :** La table `ExecutionLog` stocke les entrées/sorties (`inputData`, `outputData`) en format JSON directement dans la base relationnelle.
 
-- [x] **Circuit breaker pattern** - Protection contre les cascades d'erreurs
-- [x] **Retry automatique** - Backoff exponentiel configurable (3 tentatives)
-- [x] **Dead Letter Queue** - Gestion des executions echouees
-- [x] **Alerting multi-canal** - Email, Slack, Discord, Teams, Webhook
-- [x] **Caching des resultats** - Cache par node avec TTL
-- [x] **Execution parallele** - Jusqu'a 10 branches simultanees
-- [x] **Priority queues** - File prioritaire + file standard
-- [x] **Audit logging** - Trace complete de toutes les actions
-- [x] **Credentials chiffres** - AES-256-GCM
-- [x] **Templates avec ratings** - Galerie de templates notees
-- [x] **Sub-workflows** - Workflows reutilisables et versiones
-- [x] **Environnements** - Dev, Staging, Production avec variables
-- [x] **Commentaires** - Collaboration sur les workflows
-- [x] **Tracing distribue** - Spans OpenTelemetry-compatible
-- [x] **Branching Git-like** - Branches, commits, pull requests
+**Recommandation :**
+- [ ] Déplacer les données volumineuses vers un stockage objet (S3, MinIO) ou une base dédiée aux logs (ClickHouse, ElasticSearch)
+- [ ] PostgreSQL ne doit garder que les métadonnées légères (status, timestamps, références aux fichiers)
+- [ ] Implémenter un système de rétention avec archivage automatique des vieux logs
+
+### 1.2 Migrer le cache vers Redis
+
+**Problème actuel :** La table `NodeResultCache` stocke les résultats de nœuds pour éviter de les recalculer.
+
+**Recommandation :**
+- [ ] Migrer ce cache vers Redis (déjà présent dans l'infrastructure)
+- [ ] Utiliser les fonctionnalités TTL natives de Redis pour la gestion automatique de l'expiration
+- [ ] Réduire ainsi la charge I/O sur la base principale
+
+### 1.3 Optimiser la gestion du temps réel
+
+**Problème actuel :** Les tables `WorkflowSession`, `GuestSession` et les coordonnées des curseurs (`cursorX`, `cursorY`) sont définies dans PostgreSQL.
+
+**Recommandation :**
+- [ ] Gérer l'état "éphémère" (mouvements de souris, présence) uniquement en mémoire via Redis et WebSockets
+- [ ] Ne persister en base que les données durables (commentaires, sessions terminées pour audit)
+- [ ] Supprimer les colonnes `cursorX`, `cursorY` du schéma PostgreSQL
 
 ---
 
-## Roadmap 2025
+## 2. Simplification de l'Infrastructure et Dépendances
 
-### Q1 2025 - Fondations Innovation
+L'architecture actuelle est très lourde pour un déploiement "self-hosted" ou local.
 
-#### Visual Data Mapper
-Interface visuelle pour le mapping de donnees entre nodes.
+### 2.1 Réduire la dépendance forte à Trigger.dev
 
-- [ ] Interface drag-and-drop pour connecter les champs
-- [ ] Preview temps reel des transformations
-- [ ] Auto-detection des types de donnees
-- [ ] Support JSONPath et expressions avancees
-- [ ] Suggestions intelligentes de mapping
-- [ ] Mode visuel et mode code cote a cote
+**Problème actuel :** Le choix de Trigger.dev v3 oblige à déployer une stack complexe (Postgres dédié, ElectricSQL, Coordinator, etc.) juste pour faire tourner le worker.
 
-#### Ameliorations Techniques
-- [ ] OAuth 2.0 avec refresh automatique des tokens
-- [ ] SSO (SAML 2.0, OpenID Connect)
-- [ ] Authentification 2FA/MFA (TOTP, WebAuthn)
-- [ ] Vault integration (HashiCorp Vault, AWS Secrets Manager)
+**Recommandation :**
+- [ ] Créer une interface d'abstraction `WorkflowExecutor` pour l'exécution des workflows
+- [ ] Implémenter un moteur d'exécution "Lite" basé sur BullMQ/Redis pour :
+  - Le développement local
+  - Les petites instances self-hosted
+- [ ] Garder Trigger.dev comme option pour le mode Enterprise/Scale
+- [ ] Documenter les deux modes d'exécution
 
-#### Nouveaux Nodes
-- [ ] **SFTP/FTPS** - Transfert de fichiers securise
-- [ ] **Excel** - Lecture/ecriture Excel avec formules
-- [ ] **CSV Advanced** - Parsing avance avec schemas
-- [ ] **PDF Generation** - Creation depuis templates HTML
+### 2.2 Stabiliser les versions de dépendances
 
----
+**Problème actuel :** Le frontend utilise des versions potentiellement instables de Next.js et React.
 
-### Q2 2025 - Intelligence
-
-#### AI Workflow Copilot (Phase 1)
-Assistant IA pour la creation et l'optimisation de workflows.
-
-- [ ] Suggestions de nodes basees sur la description en langage naturel
-- [ ] Auto-completion intelligente des configurations
-- [ ] Detection d'erreurs et suggestions de correction
-- [ ] Explication des workflows existants
-- [ ] Integration OpenAI GPT-4 / Claude
-- [ ] Mode "Ask AI" dans l'editeur
-
-#### Time Travel Debugging (Phase 1)
-Debugging avance avec replay d'executions.
-
-- [ ] Replay visuel d'executions passees step-by-step
-- [ ] Inspection des donnees a chaque etape
-- [ ] Timeline interactive avec zoom
-- [ ] Export des donnees de debug
-- [ ] Comparaison avant/apres pour chaque node
-
-#### Nouveaux Nodes
-- [ ] **GraphQL Client** - Requetes et mutations GraphQL
-- [ ] **Puppeteer** - Web scraping et automatisation navigateur
-- [ ] **MQTT** - Messaging IoT
-- [ ] **GitLab** - Integration complete (issues, MR, pipelines)
-- [ ] **Bitbucket** - Repositories et pull requests
+**Recommandation :**
+- [ ] Auditer toutes les dépendances du projet
+- [ ] Repasser sur des versions LTS stables (Next.js 14/15, React 18)
+- [ ] Documenter les versions minimales requises
+- [ ] Mettre en place Dependabot ou Renovate pour les mises à jour de sécurité
 
 ---
 
-### Q3 2025 - Collaboration
+## 3. Sécurité et Confidentialité des Données
 
-#### Workflow Marketplace (Phase 1)
-Plateforme communautaire de partage de workflows.
+### 3.1 Masquage des secrets (Redaction)
 
-- [ ] Galerie de templates communautaires
-- [ ] Systeme de ratings et reviews
-- [ ] Import one-click avec configuration guidee
-- [ ] Categorisation et tags
-- [ ] Recherche avancee avec filtres
-- [ ] Preview avant import
+**Problème actuel :** Les workflows manipulent souvent des clés API ou des mots de passe. Avec le stockage actuel des `inputData` en JSON brut, ces secrets sont lisibles en clair.
 
-#### Real-Time Collaboration
-Edition collaborative en temps reel.
+**Recommandation :**
+- [ ] Implémenter un middleware de redaction qui détecte les valeurs sensibles
+- [ ] Patterns à détecter : `password`, `secret`, `api_key`, `token`, `authorization`, etc.
+- [ ] Remplacer automatiquement par `******` avant l'écriture en base
+- [ ] Permettre la configuration de patterns personnalisés
 
-- [ ] Curseurs multi-utilisateurs visibles
-- [ ] Presence indicators (qui est en ligne)
-- [ ] Chat integre par workflow
-- [ ] Mentions et notifications (@user)
-- [ ] Historique des modifications live
-- [ ] Mode "suivre" un utilisateur
+### 3.2 Sécurisation des liens de collaboration
 
-#### Mobile App (Phase 1)
-Application mobile pour le monitoring.
+**Problème actuel :** Le système permet des accès "Guest" via `CollaborationLink`.
 
-- [ ] Dashboard avec metriques cles
-- [ ] Liste des executions en cours
-- [ ] Notifications push sur erreurs
-- [ ] Actions rapides (pause, retry, cancel)
-- [ ] Mode sombre natif
-- [ ] Support iOS et Android (React Native)
+**Recommandation :**
+- [ ] Vérifier côté Backend (NestJS) que les WebSockets contrôlent strictement les permissions (VIEW, EDIT) à chaque message reçu
+- [ ] Un invité en lecture seule ne doit pas pouvoir envoyer d'événements de modification (`NODE_MOVED`, `NODE_DELETED`, etc.)
+- [ ] Implémenter un rate limiting sur les endpoints publics
+- [ ] Ajouter des logs d'audit pour les accès guests
 
 ---
 
-### Q4 2025 - Scale
+## 4. Architecture Backend (NestJS)
 
-#### AI Workflow Copilot (Phase 2)
-Generation complete de workflows par IA.
+### 4.1 Segmentation des services
 
-- [ ] Generation de workflows complets depuis description textuelle
-- [ ] Optimisation automatique des performances
-- [ ] Analyse predictive des echecs
-- [ ] Suggestions de refactoring
-- [ ] Documentation auto-generee
-- [ ] Tests auto-generes
+**Problème actuel :** La structure actuelle suggère une monolithisation logique.
 
-#### Time Travel Debugging (Phase 2)
-Debugging interactif avance.
+**Recommandation :**
+- [ ] S'assurer que la logique métier (Business Logic) est dans les Services, pas dans les Controllers
+- [ ] Séparer clairement le "Control Plane" du "Data Plane" :
+  - **Control Plane** : Gestion des utilisateurs, CRUD workflows, configuration
+  - **Data Plane** : Exécution, Ingestion de Webhooks, temps réel
+- [ ] Éviter qu'une surcharge d'exécution ne ralentisse l'interface utilisateur
+- [ ] Envisager des queues séparées pour les opérations critiques
 
-- [ ] Modification des donnees et re-execution partielle
-- [ ] Comparaison de runs cote a cote (diff view)
-- [ ] Breakpoints conditionnels visuels
-- [ ] "What-if" scenarios
-- [ ] Export de reproduction de bugs
+### 4.2 Gestion des erreurs et observabilité
 
-#### Performance & Scale
-- [ ] Streaming pour gros volumes de donnees
-- [ ] Connection pooling avance pour databases
-- [ ] Horizontal scaling automatique
-- [ ] Metriques de performance par node
-- [ ] Alertes sur degradation de performance
+**Recommandation :**
+- [ ] Implémenter un système centralisé de gestion des erreurs
+- [ ] Ajouter des métriques Prometheus/OpenTelemetry
+- [ ] Configurer des health checks détaillés (`/health/ready`, `/health/live`)
+- [ ] Mettre en place un système de tracing distribué
 
 ---
 
-## Roadmap 2026
+## 5. Qualité du Code et Tests
 
-### Q1 2026 - Platform
+### 5.1 Stratégie de tests E2E
 
-#### Workflow Marketplace (Phase 2)
-Monetisation et marketplace enterprise.
+**Problème actuel :** Avec une architecture distribuée (API + Worker + Trigger.dev + Redis + Postgres), les tests unitaires ne suffisent pas.
 
-- [ ] Monetisation pour les createurs de templates
-- [ ] Marketplace prive pour entreprises
-- [ ] Certification officielle de templates
-- [ ] Statistiques d'utilisation pour createurs
-- [ ] Revenus partages
+**Recommandation :**
+- [ ] Renforcer les tests d'intégration qui lancent un workflow complet de bout en bout
+- [ ] Valider la chaîne complète : API -> Queue -> Worker -> DB
+- [ ] Automatiser ces tests dans la CI/CD
+- [ ] Tester spécifiquement les scénarios de collaboration temps réel
 
-#### API Designer Node
-Creer des APIs depuis vos workflows.
+### 5.2 Tests de charge
 
-- [ ] Creation d'endpoints REST depuis un workflow
-- [ ] Support GraphQL
-- [ ] Documentation OpenAPI auto-generee
-- [ ] Rate limiting configurable
-- [ ] Authentification API (JWT, API Key)
-- [ ] Versioning d'API
+**Recommandation :**
+- [ ] Mettre en place des tests de charge avec k6 ou Artillery
+- [ ] Définir des seuils de performance acceptables
+- [ ] Tester les limites du système de collaboration (nombre de curseurs simultanés, etc.)
 
----
+### 5.3 Documentation du code
 
-### Q2 2026 - Enterprise
-
-#### Enterprise Features
-Fonctionnalites pour grandes organisations.
-
-- [ ] SOC2 Type II compliance
-- [ ] GDPR data export automatise
-- [ ] IP Whitelisting avance avec CIDR
-- [ ] Secrets scanning dans les logs
-- [ ] RBAC granulaire (permissions par workflow)
-- [ ] Single Sign-On obligatoire
-- [ ] Audit export pour compliance
-
-#### Advanced Analytics
-Insights avances sur vos workflows.
-
-- [ ] Prediction de couts par execution
-- [ ] Analyse des goulots d'etranglement
-- [ ] Benchmarking vs industrie (anonymise)
-- [ ] Recommendations d'optimisation
-- [ ] Rapports planifies par email
-- [ ] Dashboards personnalisables
+**Recommandation :**
+- [ ] Documenter les interfaces publiques des services
+- [ ] Générer une documentation API automatique (Swagger est déjà en place)
+- [ ] Ajouter des exemples d'utilisation pour les développeurs contribuant au projet
 
 ---
 
-### Q3-Q4 2026 - Ecosystem
+## Priorités de développement
 
-#### Multi-Language Code Node
-Execution de code dans plusieurs langages.
-
-- [ ] Python avec bibliotheques populaires (pandas, requests)
-- [ ] Go pour performances
-- [ ] Rust via WebAssembly
-- [ ] Sandboxing securise
-- [ ] Editeur avec IntelliSense
-- [ ] Tests inline
-
-#### Data Lineage Tracker
-Tracabilite complete des donnees.
-
-- [ ] Visualisation du flux de donnees end-to-end
-- [ ] Impact analysis avant modification
-- [ ] Audit trail pour compliance
-- [ ] Export GDPR automatise
-- [ ] Detection de donnees sensibles (PII)
-
-#### SDK & CLI
-Outils pour developpeurs.
-
-- [ ] SDK JavaScript/TypeScript
-- [ ] SDK Python
-- [ ] CLI pour CI/CD integration
-- [ ] Terraform provider
-- [ ] GitHub Actions
-- [ ] VS Code extension
+| Phase | Items | Criticité |
+|-------|-------|-----------|
+| **Phase 1** | 1.3 (Temps réel), 3.2 (Sécurité WebSocket) | 🔴 Critique |
+| **Phase 2** | 1.1 (Logs), 3.1 (Redaction secrets) | 🟠 Haute |
+| **Phase 3** | 1.2 (Cache Redis), 2.2 (Dépendances) | 🟡 Moyenne |
+| **Phase 4** | 2.1 (Abstraction Worker), 4.1 (Segmentation) | 🟢 Planifiée |
+| **Phase 5** | 5.x (Tests), 4.2 (Observabilité) | 🔵 Continue |
 
 ---
 
-## Nouveaux Nodes Planifies
+## Contribuer
 
-### Haute Priorite (2025)
+Si vous souhaitez contribuer à l'une de ces améliorations, veuillez :
+1. Ouvrir une issue pour discuter de l'approche
+2. Créer une branche depuis `main`
+3. Soumettre une PR avec les tests appropriés
 
-| Node | Categorie | Description |
-|------|-----------|-------------|
-| SFTP/FTPS | File | Transfert securise de fichiers |
-| Excel | File | Lecture/ecriture Excel avec formules |
-| PDF Generation | File | Generation PDF depuis templates |
-| GraphQL Client | HTTP | Requetes GraphQL |
-| Puppeteer | Scraping | Automatisation navigateur |
-| MQTT | IoT | Messaging IoT standard |
-| GitLab | DevOps | Integration complete |
-| Bitbucket | DevOps | Repositories et PRs |
-| Email Parser | Transform | Extraction structuree d'emails |
-
-### Moyenne Priorite (2025-2026)
-
-| Node | Categorie | Description |
-|------|-----------|-------------|
-| gRPC | HTTP | Communication haute performance |
-| Azure DevOps | DevOps | Pipelines et boards |
-| Prometheus | Monitoring | Metriques et alertes |
-| Snowflake | Database | Data warehouse cloud |
-| BigQuery | Database | Analytics Google Cloud |
-| DocuSign | Integration | Signatures electroniques |
-| Calendly | Integration | Planification de meetings |
-
-### Long Terme (2026+)
-
-| Node | Categorie | Description |
-|------|-----------|-------------|
-| Ethereum | Blockchain | Smart contracts |
-| Solana | Blockchain | Transactions rapides |
-| AWS IoT | IoT | Plateforme IoT Amazon |
-| Azure IoT | IoT | Plateforme IoT Microsoft |
-| ML Inference | AI | Inference de modeles ML |
-| Video Processing | Media | Transcodage et analyse video |
-
----
-
-## Comparaison Concurrentielle
-
-| Feature | WS-Flows | n8n | Zapier | Make |
-|---------|:--------:|:---:|:------:|:----:|
-| **AI Copilot** | Prevu Q2 2025 | - | - | - |
-| **Time Travel Debug** | Prevu Q2 2025 | - | - | - |
-| **Visual Data Mapper** | Prevu Q1 2025 | Partiel | - | Partiel |
-| **Self-hosted** | Oui | Oui | - | - |
-| **Open Source** | Oui | Oui | - | - |
-| **Git-like Versioning** | Oui | - | - | - |
-| **Real-time Collab** | Prevu Q3 2025 | - | - | - |
-| **Marketplace** | Prevu Q3 2025 | Oui | Oui | Oui |
-| **Mobile App** | Prevu Q3 2025 | - | Oui | Oui |
-| **91+ Nodes** | Oui | Oui | Oui | Oui |
-
----
-
-## Contribution
-
-Pour contribuer au developpement de WS-Flows :
-
-### Ajouter un nouveau Node
-
-1. Creer le dossier dans `packages/nodes/src/<category>/<node-name>/`
-2. Implementer la definition avec schema Zod
-3. Ecrire le runner avec gestion d'erreurs
-4. Ajouter les tests unitaires
-5. Documenter dans `docs/nodes/`
-6. Soumettre une PR
-
-### Proposer une fonctionnalite
-
-1. Ouvrir une issue avec le label `enhancement`
-2. Decrire le use case et les benefices
-3. Proposer une implementation si possible
-4. Participer a la discussion
-
-### Ressources
-
-- [Guide de developpement de nodes](docs/nodes/)
-- [Architecture du projet](docs/architecture/)
-- [API Documentation](docs/api/)
-- [Contributing Guide](CONTRIBUTING.md)
-
----
-
-## Changelog des versions
-
-### v0.1.0 (Decembre 2024)
-- Release initiale
-- 91+ nodes disponibles
-- Workflow editor complet
-- Monitoring temps reel
-- Systeme de branches et PR
-
----
-
-*Derniere mise a jour: Decembre 2024*
+Consultez [CLAUDE.md](./CLAUDE.md) pour les conventions de développement.

@@ -3,9 +3,9 @@
 import { ReactNode, useCallback, useEffect, useState } from 'react';
 import {
   Panel,
-  Group as PanelGroup,
-  Separator as PanelResizeHandle,
-  type PanelImperativeHandle,
+  PanelGroup,
+  PanelResizeHandle,
+  type ImperativePanelHandle,
 } from 'react-resizable-panels';
 import { cn } from '@/lib/utils';
 import {
@@ -186,7 +186,7 @@ interface DockablePanelProps {
   collapsible?: boolean;
   headerActions?: ReactNode;
   className?: string;
-  panelRef?: React.RefObject<PanelImperativeHandle | null>;
+  panelRef?: React.RefObject<ImperativePanelHandle | null>;
 }
 
 export function DockablePanel({
@@ -211,7 +211,7 @@ export function DockablePanel({
   return (
     <Panel
       id={id}
-      panelRef={panelRef as any}
+      ref={panelRef as any}
       defaultSize={defaultSize}
       minSize={isCollapsed ? 3 : minSize}
       maxSize={maxSize}
@@ -332,9 +332,9 @@ export function EditorPanelLayout({
     <div className="flex h-full w-full flex-col">
       {/* Main horizontal layout: Canvas | Right Panels */}
       <PanelGroup
-        orientation="horizontal"
+        direction="horizontal"
         className="flex-1"
-        onLayoutChange={(sizes) => handleLayoutChange(Object.values(sizes), 'main')}
+        onLayout={(sizes) => handleLayoutChange(sizes, 'main')}
       >
         {/* Left side: Canvas + Bottom panels */}
         <Panel
@@ -343,8 +343,8 @@ export function EditorPanelLayout({
           className="flex flex-col"
         >
           <PanelGroup
-            orientation="vertical"
-            onLayoutChange={(sizes) => handleLayoutChange(Object.values(sizes), 'bottom')}
+            direction="vertical"
+            onLayout={(sizes) => handleLayoutChange(sizes, 'bottom')}
           >
             {/* Canvas area */}
             <Panel defaultSize={hasBottomPanels ? 65 : 100} minSize={30}>
@@ -388,8 +388,8 @@ export function EditorPanelLayout({
             <ResizeHandle direction="horizontal" />
             <Panel defaultSize={30} minSize={15} maxSize={50}>
               <PanelGroup
-                orientation="vertical"
-                onLayoutChange={(sizes) => handleLayoutChange(Object.values(sizes), 'right')}
+                direction="vertical"
+                onLayout={(sizes) => handleLayoutChange(sizes, 'right')}
               >
                 {/* Stack right panels vertically */}
                 {isLibraryVisible && libraryPanel && (

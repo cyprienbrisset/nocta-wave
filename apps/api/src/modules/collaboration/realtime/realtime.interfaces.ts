@@ -96,11 +96,25 @@ export interface WorkflowChangePayload {
 }
 
 // Redis keys
+// NOTE: Cursor and viewport data is stored in Redis only (not PostgreSQL)
+// This eliminates expensive DB writes on every mouse move
 export const REDIS_KEYS = {
   workflowUsers: (workflowId: string) => `collab:workflow:${workflowId}:users`,
   workflowTyping: (workflowId: string) => `collab:workflow:${workflowId}:typing`,
   userFollowing: (userId: string) => `collab:follow:${userId}`,
   userSocket: (userId: string) => `collab:socket:${userId}`,
+  // Ephemeral data - stored in Redis with TTL (no PostgreSQL writes)
+  userCursor: (socketId: string) => `collab:cursor:${socketId}`,
+  userViewport: (socketId: string) => `collab:viewport:${socketId}`,
+  guestCursor: (sessionId: string) => `collab:guest:${sessionId}:cursor`,
+  guestViewport: (sessionId: string) => `collab:guest:${sessionId}:viewport`,
+} as const;
+
+// TTL for ephemeral data (in seconds)
+export const REDIS_TTL = {
+  cursor: 60,      // Cursor position expires after 60s of inactivity
+  viewport: 300,   // Viewport state expires after 5 minutes
+  typing: 10,      // Typing indicator expires after 10 seconds
 } as const;
 
 // Collaboration colors for users

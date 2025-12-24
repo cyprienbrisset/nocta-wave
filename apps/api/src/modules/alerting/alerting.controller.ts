@@ -56,8 +56,7 @@ export class AlertingController {
   @Get('rules/:id')
   async getAlertRule(@Param('id') id: string, @Req() req: any) {
     const teamId = req.user.currentTeamId;
-    const rules = await this.alertingService.getAlertRules(teamId);
-    return rules.find((r) => r.id === id);
+    return this.alertingService.getAlertRuleById(teamId, id);
   }
 
   @Get('history')
@@ -86,25 +85,6 @@ export class AlertingController {
   @Post('test/:ruleId')
   async testAlertRule(@Param('ruleId') ruleId: string, @Req() req: any) {
     const teamId = req.user.currentTeamId;
-    const rules = await this.alertingService.getAlertRules(teamId);
-    const rule = rules.find((r) => r.id === ruleId);
-
-    if (!rule) {
-      throw new Error('Alert rule not found');
-    }
-
-    // Send test alert to all channels
-    const testContext = {
-      teamId,
-      workflowId: 'test-workflow',
-      workflowName: 'Test Workflow',
-      executionId: 'test-execution',
-      errorMessage: 'This is a test alert',
-    };
-
-    // Use private method through reflection for testing
-    await (this.alertingService as any).fireAlert(rule, testContext, 'INFO');
-
-    return { success: true, message: 'Test alert sent' };
+    return this.alertingService.sendTestAlert(teamId, ruleId);
   }
 }

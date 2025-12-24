@@ -144,35 +144,6 @@ services:
       - "traefik.http.routers.web.rule=Host(`${DOMAIN:-localhost}`)"
       - "traefik.http.services.web.loadbalancer.server.port=3000"
 
-  # ---------------------------------------------------------------------------
-  # Worker (Trigger.dev)
-  # ---------------------------------------------------------------------------
-  worker:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.worker
-    image: wsflows/worker:${VERSION:-latest}
-    container_name: wsflows-worker
-    environment:
-      NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-wsflows}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-wsflows}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
-      TRIGGER_API_URL: ${TRIGGER_API_URL}
-      TRIGGER_API_KEY: ${TRIGGER_API_KEY}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: always
-    networks:
-      - wsflows-internal
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-
 # =============================================================================
 # Volumes
 # =============================================================================

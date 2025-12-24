@@ -14,7 +14,6 @@ export type {
   ValidationRule,
   DisplayOptions,
   NodeMetadata,
-  TriggerDevStep,
 } from '@ws-flows/shared';
 
 // Additional types for node creation

@@ -33,6 +33,8 @@ import { TemplateModule } from './modules/template/template.module';
 import { EnvironmentModule } from './modules/environment/environment.module';
 import { BranchModule } from './modules/branch/branch.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
+import { StorageModule } from './modules/storage/storage.module';
+import { SecurityModule } from './modules/security/security.module';
 
 @Module({
   imports: [
@@ -85,6 +87,8 @@ import { MonitoringModule } from './modules/monitoring/monitoring.module';
     EnvironmentModule,
     BranchModule,
     MonitoringModule,
+    StorageModule,
+    SecurityModule,
   ],
 })
 export class AppModule {}

@@ -44,15 +44,6 @@ export const createMockEventEmitter = () => ({
 });
 
 /**
- * Mock Trigger.dev Client
- */
-export const createMockTriggerClient = () => ({
-  sendEvent: jest.fn().mockResolvedValue({ id: 'event-123' }),
-  getRunStatus: jest.fn().mockResolvedValue({ status: 'SUCCESS' }),
-  cancelRun: jest.fn().mockResolvedValue({ success: true }),
-});
-
-/**
  * Mock Webhook Service
  */
 export const createMockWebhookService = () => ({

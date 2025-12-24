@@ -2,14 +2,13 @@
 
 ## Project Overview
 
-WS-Flows is an open-source, self-hostable workflow orchestration platform inspired by n8n. It uses Trigger.dev as the execution engine and provides a visual workflow editor.
+WS-Flows is an open-source, self-hostable workflow orchestration platform inspired by n8n. It provides a visual workflow editor with real-time collaboration features.
 
 ## Tech Stack
 
 - **Monorepo**: pnpm workspaces + Turborepo
 - **Backend**: NestJS, Prisma, PostgreSQL, Redis
 - **Frontend**: Next.js 14 (App Router), React Flow, Tailwind, shadcn/ui
-- **Engine**: Trigger.dev (local mode)
 - **Language**: TypeScript (strict mode)
 
 ## Project Structure
@@ -24,15 +23,10 @@ ws-flows/
 │   │   │   └── main.ts
 │   │   └── prisma/
 │   │       └── schema.prisma
-│   ├── web/                 # Next.js frontend
-│   │   ├── app/            # App Router pages
-│   │   ├── components/     # React components
-│   │   └── lib/            # Utilities
-│   └── worker/             # Trigger.dev worker
-│       ├── src/
-│       │   ├── jobs/       # Job definitions
-│       │   └── nodes/      # Node runners
-│       └── trigger.config.ts
+│   └── web/                 # Next.js frontend
+│       ├── app/            # App Router pages
+│       ├── components/     # React components
+│       └── lib/            # Utilities
 ├── packages/
 │   ├── shared/             # Shared types & utils
 │   │   ├── src/
@@ -183,18 +177,6 @@ interface NodeDefinition {
 4. Add `ui.json` for frontend configuration
 5. Export in `packages/nodes/src/index.ts`
 
-## Trigger.dev Integration
-
-### Job Mapping
-- Each workflow = one Trigger.dev job
-- Each node = one step in the job
-- Workflow execution = job run
-
-### Local Development
-```bash
-npx trigger.dev@latest dev
-```
-
 ## Commands
 
 ### Development
@@ -203,7 +185,6 @@ pnpm install          # Install dependencies
 pnpm dev              # Start all apps in dev mode
 pnpm dev:api          # Start API only
 pnpm dev:web          # Start frontend only
-pnpm dev:worker       # Start Trigger.dev worker
 ```
 
 ### Database
@@ -233,16 +214,18 @@ pnpm typecheck        # TypeScript check
 
 ### API (.env)
 ```
-DATABASE_URL=postgresql://user:pass@localhost:5432/wsflows
-REDIS_URL=redis://localhost:6379
+DATABASE_URL=postgresql://user:pass@localhost:5434/wsflows
+REDIS_URL=redis://:password@localhost:6380
 JWT_SECRET=your-secret-key
 ENCRYPTION_KEY=32-byte-hex-key
-TRIGGER_API_KEY=your-trigger-key
+PORT=4001
+CORS_ORIGIN=http://localhost:4000
 ```
 
 ### Web (.env.local)
 ```
-NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_API_URL=http://localhost:4001/api
+NEXT_PUBLIC_WS_URL=ws://localhost:4001
 ```
 
 ## Important Guidelines for Claude

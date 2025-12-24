@@ -10,7 +10,7 @@ export interface Execution {
   workflowVersion: number;
   status: ExecutionStatus;
   triggerType: TriggerType;
-  triggerRunId?: string; // Trigger.dev run ID
+  triggerRunId?: string; // Internal run ID
   input?: Record<string, unknown>;
   output?: Record<string, unknown>;
   error?: string;

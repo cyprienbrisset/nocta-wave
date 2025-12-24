@@ -41,8 +41,9 @@ export class DLQController {
   }
 
   @Post(':id/retry')
-  async retryEntry(@Param('id') id: string) {
-    return this.dlqService.retryEntry(id);
+  async retryEntry(@Param('id') id: string, @Req() req: any) {
+    const teamId = req.user.currentTeamId;
+    return this.dlqService.retryEntryWithTeamCheck(id, teamId);
   }
 
   @Post('workflow/:workflowId/retry-all')
@@ -56,14 +57,14 @@ export class DLQController {
 
   @Put(':id/resolve')
   async markResolved(@Param('id') id: string, @Req() req: any) {
+    const teamId = req.user.currentTeamId;
     const userId = req.user.id;
-    await this.dlqService.markResolved(id, userId);
-    return { success: true };
+    return this.dlqService.markResolvedWithTeamCheck(id, teamId, userId);
   }
 
   @Put(':id/discard')
-  async discardEntry(@Param('id') id: string) {
-    await this.dlqService.discardEntry(id);
-    return { success: true };
+  async discardEntry(@Param('id') id: string, @Req() req: any) {
+    const teamId = req.user.currentTeamId;
+    return this.dlqService.discardEntryWithTeamCheck(id, teamId);
   }
 }

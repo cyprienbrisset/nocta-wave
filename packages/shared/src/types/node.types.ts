@@ -124,8 +124,6 @@ export interface NodeContext {
   workflowId: string;
   nodeId: string;
   logger: NodeLogger;
-  /** Trigger.dev step utilities */
-  step?: TriggerDevStep;
 }
 
 export interface NodeLogger {
@@ -133,10 +131,6 @@ export interface NodeLogger {
   info(message: string, data?: Record<string, unknown>): void;
   warn(message: string, data?: Record<string, unknown>): void;
   error(message: string, data?: Record<string, unknown>): void;
-}
-
-export interface TriggerDevStep {
-  run<T>(name: string, fn: () => Promise<T>): Promise<T>;
 }
 
 export interface NodeOutput {

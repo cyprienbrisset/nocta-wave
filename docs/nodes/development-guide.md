@@ -146,7 +146,6 @@ export interface NodeContext {
   workflowId: string;
   nodeId: string;
   logger: Logger;
-  step: TriggerDevStep;               // Trigger.dev step utilities
 }
 
 export interface NodeOutput {
@@ -285,67 +284,64 @@ export const httpRequestRunner: NodeRunner = async (
   input: NodeInput,
   context: NodeContext
 ): Promise<NodeOutput> => {
-  const { logger, step } = context;
+  const { logger } = context;
 
   // Validate configuration
   const config = HttpRequestConfigSchema.parse(input.config);
 
   logger.info(`Making ${config.method} request to ${config.url}`);
 
-  // Use Trigger.dev step for observability
-  const response = await step.run('http-request', async () => {
-    const headers: Record<string, string> = {
-      ...config.headers,
-    };
+  const headers: Record<string, string> = {
+    ...config.headers,
+  };
 
-    // Inject credentials if provided
-    if (input.credentials) {
-      const cred = input.credentials;
-      if (cred.apiKey) {
-        const prefix = cred.prefix || 'Bearer';
-        const headerName = cred.headerName || 'Authorization';
-        headers[headerName] = `${prefix} ${cred.apiKey}`;
-      } else if (cred.username && cred.password) {
-        const encoded = Buffer.from(
-          `${cred.username}:${cred.password}`
-        ).toString('base64');
-        headers['Authorization'] = `Basic ${encoded}`;
-      }
+  // Inject credentials if provided
+  if (input.credentials) {
+    const cred = input.credentials;
+    if (cred.apiKey) {
+      const prefix = cred.prefix || 'Bearer';
+      const headerName = cred.headerName || 'Authorization';
+      headers[headerName] = `${prefix} ${cred.apiKey}`;
+    } else if (cred.username && cred.password) {
+      const encoded = Buffer.from(
+        `${cred.username}:${cred.password}`
+      ).toString('base64');
+      headers['Authorization'] = `Basic ${encoded}`;
     }
+  }
 
-    const fetchOptions: RequestInit = {
-      method: config.method,
-      headers,
-      redirect: config.followRedirects ? 'follow' : 'manual',
-      signal: AbortSignal.timeout(config.timeout),
-    };
+  const fetchOptions: RequestInit = {
+    method: config.method,
+    headers,
+    redirect: config.followRedirects ? 'follow' : 'manual',
+    signal: AbortSignal.timeout(config.timeout),
+  };
 
-    if (
-      config.body &&
-      ['POST', 'PUT', 'PATCH'].includes(config.method)
-    ) {
-      fetchOptions.body = JSON.stringify(config.body);
-      headers['Content-Type'] = headers['Content-Type'] || 'application/json';
-    }
+  if (
+    config.body &&
+    ['POST', 'PUT', 'PATCH'].includes(config.method)
+  ) {
+    fetchOptions.body = JSON.stringify(config.body);
+    headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+  }
 
-    const res = await fetch(config.url, fetchOptions);
+  const res = await fetch(config.url, fetchOptions);
 
-    let body: unknown;
-    const contentType = res.headers.get('content-type') || '';
+  let body: unknown;
+  const contentType = res.headers.get('content-type') || '';
 
-    if (contentType.includes('application/json')) {
-      body = await res.json();
-    } else {
-      body = await res.text();
-    }
+  if (contentType.includes('application/json')) {
+    body = await res.json();
+  } else {
+    body = await res.text();
+  }
 
-    return {
-      status: res.status,
-      statusText: res.statusText,
-      headers: Object.fromEntries(res.headers.entries()),
-      body,
-    };
-  });
+  const response = {
+    status: res.status,
+    statusText: res.statusText,
+    headers: Object.fromEntries(res.headers.entries()),
+    body,
+  };
 
   logger.info(`Request completed with status ${response.status}`);
 
@@ -426,9 +422,6 @@ describe('HTTP Request Node', () => {
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
-    },
-    step: {
-      run: vi.fn((name, fn) => fn()),
     },
   };
 
@@ -563,8 +556,7 @@ Nodes support expressions for dynamic values:
 1. **Validate inputs** - Always use Zod schemas
 2. **Log appropriately** - Use context.logger for observability
 3. **Handle errors** - Throw descriptive errors
-4. **Use Trigger.dev steps** - For retries and observability
-5. **Keep runners pure** - No side effects outside the step
-6. **Document thoroughly** - Clear descriptions and examples
-7. **Write tests** - Unit tests for all runners
-8. **Type everything** - Full TypeScript coverage
+4. **Keep runners pure** - No side effects outside the execution
+5. **Document thoroughly** - Clear descriptions and examples
+6. **Write tests** - Unit tests for all runners
+7. **Type everything** - Full TypeScript coverage

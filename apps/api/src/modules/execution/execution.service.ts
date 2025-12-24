@@ -7,6 +7,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { RedisService } from '../../database/redis.service';
 import { TeamService } from '../team/team.service';
 import { WorkflowService } from '../workflow/workflow.service';
+import { ExecutionLogStorageService } from '../storage/execution-log-storage.service';
 import { ExecutionStatus, TriggerType } from '@prisma/client';
 import { ExecutionQueryDto } from './dto/execution.dto';
 
@@ -17,6 +18,7 @@ export class ExecutionService {
     private redis: RedisService,
     private teamService: TeamService,
     private workflowService: WorkflowService,
+    private logStorage: ExecutionLogStorageService,
   ) {}
 
   /**
@@ -106,6 +108,60 @@ export class ExecutionService {
     }
 
     return execution;
+  }
+
+  /**
+   * Get execution log with full data (hydrated from object storage if needed)
+   */
+  async getLogWithFullData(logId: string, userId?: string) {
+    const log = await this.prisma.executionLog.findUnique({
+      where: { id: logId },
+      include: {
+        execution: {
+          include: {
+            workflow: {
+              select: { teamId: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!log) {
+      throw new NotFoundException('Execution log not found');
+    }
+
+    // Verify access
+    if (userId) {
+      await this.teamService.checkTeamAccess(
+        log.execution.workflow.teamId,
+        userId,
+        ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'],
+      );
+    }
+
+    // Hydrate data from object storage if externalized
+    const fullData = await this.logStorage.getFullLogData({
+      inputData: log.inputData,
+      outputData: log.outputData,
+      inputDataRef: log.inputDataRef,
+      outputDataRef: log.outputDataRef,
+    });
+
+    return {
+      ...log,
+      inputData: fullData.inputData,
+      outputData: fullData.outputData,
+      // Indicate if data was hydrated from external storage
+      _dataHydrated: !!(log.inputDataRef || log.outputDataRef),
+    };
+  }
+
+  /**
+   * Check if log data is externalized
+   */
+  isLogDataExternalized(log: { inputDataRef?: unknown; outputDataRef?: unknown }): boolean {
+    return !!(log.inputDataRef || log.outputDataRef);
   }
 
   /**

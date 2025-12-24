@@ -558,6 +558,47 @@ export class AlertingService {
   }
 
   /**
+   * Get a single alert rule by ID with team validation
+   */
+  async getAlertRuleById(teamId: string, ruleId: string) {
+    return this.prisma.alertRule.findFirst({
+      where: { id: ruleId, teamId },
+      include: { channels: true },
+    });
+  }
+
+  /**
+   * Send a test alert for a rule (for testing channel configuration)
+   */
+  async sendTestAlert(teamId: string, ruleId: string): Promise<{ success: boolean; message: string }> {
+    const rule = await this.prisma.alertRule.findFirst({
+      where: { id: ruleId, teamId },
+      include: { channels: { where: { isActive: true } } },
+    });
+
+    if (!rule) {
+      return { success: false, message: 'Alert rule not found' };
+    }
+
+    const testContext: AlertContext = {
+      teamId,
+      workflowId: 'test-workflow',
+      workflowName: 'Test Workflow',
+      executionId: 'test-execution',
+      errorMessage: 'This is a test alert',
+    };
+
+    try {
+      await this.fireAlert(rule as AlertRuleWithChannels, testContext, 'INFO');
+      return { success: true, message: 'Test alert sent successfully' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to send test alert: ${message}`);
+      return { success: false, message: `Failed to send test alert: ${message}` };
+    }
+  }
+
+  /**
    * Get alert history
    */
   async getAlertHistory(

@@ -1,36 +1,59 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../database/prisma.service';
 import { RedisService } from '../../database/redis.service';
 import * as crypto from 'crypto';
 
 interface CacheOptions {
   ttlSeconds?: number;
-  useRedis?: boolean;
   nodeType?: string;
 }
 
 interface CacheEntry {
-  outputData: any;
-  cachedAt: Date;
-  expiresAt: Date;
+  outputData: unknown;
+  nodeType: string;
+  cachedAt: string;
+  expiresAt: string;
 }
 
+export interface CacheStats {
+  total: number;
+  byNode: Record<string, { count: number }>;
+}
+
+/**
+ * NodeCacheService - Redis-only cache for node execution results
+ *
+ * PERFORMANCE OPTIMIZATION:
+ * This service was migrated from a hybrid PostgreSQL + Redis approach
+ * to Redis-only storage for the following reasons:
+ *
+ * 1. Cache data is ephemeral with TTL - no need for persistent storage
+ * 2. Redis provides native TTL expiration (no cleanup jobs needed)
+ * 3. Eliminates expensive PostgreSQL I/O for high-frequency operations
+ * 4. Sub-millisecond access times vs database round-trips
+ *
+ * Redis key pattern: node-cache:{workflowId}:{nodeId}:{inputHash}
+ */
 @Injectable()
 export class NodeCacheService {
   private readonly logger = new Logger(NodeCacheService.name);
   private readonly defaultTTL = 3600; // 1 hour
+  private readonly cachePrefix = 'node-cache';
 
-  constructor(
-    private prisma: PrismaService,
-    private redis: RedisService,
-  ) {}
+  constructor(private redis: RedisService) {}
 
   /**
    * Generate a hash from input data for cache key
    */
-  private generateInputHash(input: any): string {
-    const normalized = JSON.stringify(input, Object.keys(input || {}).sort());
+  private generateInputHash(input: unknown): string {
+    const normalized = JSON.stringify(input, Object.keys((input as object) || {}).sort());
     return crypto.createHash('sha256').update(normalized).digest('hex');
+  }
+
+  /**
+   * Build Redis key for cache entry
+   */
+  private buildKey(workflowId: string, nodeId: string, inputHash: string): string {
+    return `${this.cachePrefix}:${workflowId}:${nodeId}:${inputHash}`;
   }
 
   /**
@@ -39,44 +62,19 @@ export class NodeCacheService {
   async get(
     workflowId: string,
     nodeId: string,
-    inputData: any,
-    options?: CacheOptions,
-  ): Promise<CacheEntry | null> {
+    inputData: unknown,
+  ): Promise<{ outputData: unknown; cachedAt: Date; expiresAt: Date } | null> {
     const inputHash = this.generateInputHash(inputData);
+    const key = this.buildKey(workflowId, nodeId, inputHash);
 
-    // Try Redis first for faster access
-    if (options?.useRedis !== false) {
-      const redisKey = `node-cache:${workflowId}:${nodeId}:${inputHash}`;
-      const cached = await this.redis.get<CacheEntry>(redisKey);
-      if (cached) {
-        this.logger.debug(`Cache hit (Redis) for node ${nodeId}`);
-        return cached;
-      }
-    }
+    const cached = await this.redis.get<CacheEntry>(key);
 
-    // Fall back to database
-    const dbCache = await this.prisma.nodeResultCache.findFirst({
-      where: {
-        workflowId,
-        nodeId,
-        inputHash,
-        expiresAt: { gt: new Date() },
-      },
-    });
-
-    if (dbCache) {
-      // Increment hit count
-      await this.prisma.nodeResultCache.update({
-        where: { id: dbCache.id },
-        data: { hitCount: { increment: 1 } },
-      });
-
-      this.logger.debug(`Cache hit (DB) for node ${nodeId}`);
-
+    if (cached) {
+      this.logger.debug(`Cache hit for node ${nodeId}`);
       return {
-        outputData: dbCache.outputData,
-        cachedAt: dbCache.createdAt,
-        expiresAt: dbCache.expiresAt,
+        outputData: cached.outputData,
+        cachedAt: new Date(cached.cachedAt),
+        expiresAt: new Date(cached.expiresAt),
       };
     }
 
@@ -89,50 +87,25 @@ export class NodeCacheService {
   async set(
     workflowId: string,
     nodeId: string,
-    inputData: any,
-    outputData: any,
+    inputData: unknown,
+    outputData: unknown,
     options?: CacheOptions,
   ): Promise<void> {
     const inputHash = this.generateInputHash(inputData);
     const ttlSeconds = options?.ttlSeconds || this.defaultTTL;
-    const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
+    const key = this.buildKey(workflowId, nodeId, inputHash);
 
-    // Store in Redis for fast access
-    if (options?.useRedis !== false) {
-      const redisKey = `node-cache:${workflowId}:${nodeId}:${inputHash}`;
-      const cacheEntry: CacheEntry = {
-        outputData,
-        cachedAt: new Date(),
-        expiresAt,
-      };
-      await this.redis.setex(redisKey, ttlSeconds, JSON.stringify(cacheEntry));
-    }
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
 
-    // Store in database for persistence
-    await this.prisma.nodeResultCache.upsert({
-      where: {
-        workflowId_nodeId_inputHash: {
-          workflowId,
-          nodeId,
-          inputHash,
-        },
-      },
-      create: {
-        workflowId,
-        nodeId,
-        nodeType: options?.nodeType || 'unknown',
-        inputHash,
-        outputData: outputData as any,
-        ttlSeconds,
-        expiresAt,
-      },
-      update: {
-        outputData: outputData as any,
-        ttlSeconds,
-        expiresAt,
-        hitCount: 0,
-      },
-    });
+    const cacheEntry: CacheEntry = {
+      outputData,
+      nodeType: options?.nodeType || 'unknown',
+      cachedAt: now.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+    };
+
+    await this.redis.set(key, cacheEntry, ttlSeconds);
 
     this.logger.debug(`Cached result for node ${nodeId} (TTL: ${ttlSeconds}s)`);
   }
@@ -141,96 +114,68 @@ export class NodeCacheService {
    * Invalidate cache for a specific node
    */
   async invalidateNode(workflowId: string, nodeId: string): Promise<number> {
-    // Clear from Redis
-    const pattern = `node-cache:${workflowId}:${nodeId}:*`;
+    const pattern = `${this.cachePrefix}:${workflowId}:${nodeId}:*`;
     const keys = await this.redis.keys(pattern);
+
     if (keys.length > 0) {
       await this.redis.delMultiple(...keys);
+      this.logger.log(`Invalidated ${keys.length} cache entries for node ${nodeId}`);
     }
 
-    // Clear from database
-    const result = await this.prisma.nodeResultCache.deleteMany({
-      where: { workflowId, nodeId },
-    });
-
-    this.logger.log(`Invalidated ${result.count} cache entries for node ${nodeId}`);
-    return result.count;
+    return keys.length;
   }
 
   /**
    * Invalidate all cache for a workflow
    */
   async invalidateWorkflow(workflowId: string): Promise<number> {
-    // Clear from Redis
-    const pattern = `node-cache:${workflowId}:*`;
+    const pattern = `${this.cachePrefix}:${workflowId}:*`;
     const keys = await this.redis.keys(pattern);
+
     if (keys.length > 0) {
       await this.redis.delMultiple(...keys);
+      this.logger.log(`Invalidated ${keys.length} cache entries for workflow ${workflowId}`);
     }
 
-    // Clear from database
-    const result = await this.prisma.nodeResultCache.deleteMany({
-      where: { workflowId },
-    });
-
-    this.logger.log(`Invalidated ${result.count} cache entries for workflow ${workflowId}`);
-    return result.count;
+    return keys.length;
   }
 
   /**
    * Get cache statistics for a workflow
+   * Note: This scans Redis keys, use sparingly in production
    */
-  async getStats(workflowId: string) {
-    const entries = await this.prisma.nodeResultCache.findMany({
-      where: { workflowId },
-      select: {
-        nodeId: true,
-        hitCount: true,
-        ttlSeconds: true,
-        createdAt: true,
-        expiresAt: true,
-      },
-    });
+  async getStats(workflowId: string): Promise<CacheStats> {
+    const pattern = `${this.cachePrefix}:${workflowId}:*`;
+    const keys = await this.redis.keys(pattern);
 
-    const now = new Date();
-    const active = entries.filter((e) => e.expiresAt > now);
-    const expired = entries.filter((e) => e.expiresAt <= now);
-    const totalHits = entries.reduce((sum, e) => sum + e.hitCount, 0);
+    // Parse keys to group by node
+    const byNode: Record<string, { count: number }> = {};
 
-    // Group by node
-    const byNode = entries.reduce(
-      (acc, e) => {
-        if (!acc[e.nodeId]) {
-          acc[e.nodeId] = { count: 0, hits: 0 };
+    for (const key of keys) {
+      // Key format: node-cache:{workflowId}:{nodeId}:{inputHash}
+      const parts = key.split(':');
+      if (parts.length >= 3) {
+        const nodeId = parts[2];
+        if (!byNode[nodeId]) {
+          byNode[nodeId] = { count: 0 };
         }
-        acc[e.nodeId].count++;
-        acc[e.nodeId].hits += e.hitCount;
-        return acc;
-      },
-      {} as Record<string, { count: number; hits: number }>,
-    );
+        byNode[nodeId].count++;
+      }
+    }
 
     return {
-      total: entries.length,
-      active: active.length,
-      expired: expired.length,
-      totalHits,
+      total: keys.length,
       byNode,
     };
   }
 
   /**
-   * Cleanup expired cache entries
+   * Cleanup is now handled automatically by Redis TTL
+   * This method is kept for backwards compatibility but does nothing
    */
   async cleanup(): Promise<number> {
-    const result = await this.prisma.nodeResultCache.deleteMany({
-      where: {
-        expiresAt: { lt: new Date() },
-      },
-    });
-
-    this.logger.log(`Cleaned up ${result.count} expired cache entries`);
-    return result.count;
+    this.logger.debug('Cleanup not needed - Redis TTL handles expiration automatically');
+    return 0;
   }
 
   /**
@@ -239,12 +184,12 @@ export class NodeCacheService {
   async getOrCompute<T>(
     workflowId: string,
     nodeId: string,
-    inputData: any,
+    inputData: unknown,
     compute: () => Promise<T>,
     options?: CacheOptions,
   ): Promise<{ data: T; fromCache: boolean }> {
     // Try cache first
-    const cached = await this.get(workflowId, nodeId, inputData, options);
+    const cached = await this.get(workflowId, nodeId, inputData);
     if (cached) {
       return { data: cached.outputData as T, fromCache: true };
     }
@@ -254,5 +199,24 @@ export class NodeCacheService {
     await this.set(workflowId, nodeId, inputData, result, options);
 
     return { data: result, fromCache: false };
+  }
+
+  /**
+   * Check if a cached result exists without retrieving it
+   */
+  async has(workflowId: string, nodeId: string, inputData: unknown): Promise<boolean> {
+    const inputHash = this.generateInputHash(inputData);
+    const key = this.buildKey(workflowId, nodeId, inputHash);
+    return this.redis.exists(key);
+  }
+
+  /**
+   * Get remaining TTL for a cached entry
+   */
+  async getTTL(workflowId: string, nodeId: string, inputData: unknown): Promise<number> {
+    const inputHash = this.generateInputHash(inputData);
+    const key = this.buildKey(workflowId, nodeId, inputHash);
+    const client = this.redis.getClient();
+    return client.ttl(key);
   }
 }

@@ -25,7 +25,7 @@ pnpm install
 ### 3. Start infrastructure
 
 ```bash
-docker-compose up -d postgres redis
+docker compose -f docker/docker-compose.yml up -d
 ```
 
 ### 4. Set up environment
@@ -34,7 +34,6 @@ docker-compose up -d postgres redis
 # Copy environment files
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
-cp apps/worker/.env.example apps/worker/.env
 
 # Generate encryption key
 openssl rand -hex 32
@@ -56,16 +55,15 @@ pnpm db:seed
 pnpm dev
 
 # Or start individually
-pnpm dev:api     # http://localhost:3001
-pnpm dev:web     # http://localhost:3000
-pnpm dev:worker  # Trigger.dev worker
+pnpm dev:api     # http://localhost:4001
+pnpm dev:web     # http://localhost:4000
 ```
 
 ### 7. Access the application
 
-- **Frontend**: http://localhost:3000
-- **API**: http://localhost:3001
-- **API Docs**: http://localhost:3001/api/docs
+- **Frontend**: http://localhost:4000
+- **API**: http://localhost:4001
+- **API Docs**: http://localhost:4001/docs
 
 ### Default credentials
 
@@ -120,7 +118,7 @@ pnpm add -D turbo -w
 ### Create apps structure
 
 ```bash
-mkdir -p apps/{api,web,worker}
+mkdir -p apps/{api,web}
 mkdir -p packages/{shared,nodes,ui}
 ```
 
@@ -148,19 +146,8 @@ cd apps/web
 pnpm create next-app . --typescript --tailwind --eslint --app --src-dir
 
 # Add dependencies
-pnpm add @tanstack/react-query zustand reactflow
+pnpm add @tanstack/react-query zustand @xyflow/react
 pnpm add @radix-ui/react-dialog @radix-ui/react-dropdown-menu
-```
-
-### Set up Worker (Trigger.dev)
-
-```bash
-cd apps/worker
-
-# Initialize Trigger.dev
-npx trigger.dev@latest init
-
-# Configure local mode
 ```
 
 ### Set up shared packages
@@ -195,10 +182,10 @@ EOF
 
 ```env
 # Database
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/wsflows?schema=public"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5434/wsflows?schema=public"
 
 # Redis
-REDIS_URL="redis://localhost:6379"
+REDIS_URL="redis://:password@localhost:6380"
 
 # Auth
 JWT_SECRET="your-super-secret-jwt-key-change-in-production"
@@ -208,29 +195,17 @@ JWT_REFRESH_EXPIRES_IN="7d"
 # Encryption (for credentials)
 ENCRYPTION_KEY="generate-with-openssl-rand-hex-32"
 
-# Trigger.dev
-TRIGGER_API_KEY="your-trigger-api-key"
-TRIGGER_API_URL="http://localhost:3030"
-
 # Server
-PORT=3001
+PORT=4001
 NODE_ENV=development
+CORS_ORIGIN=http://localhost:4000
 ```
 
 ### Web (.env.local)
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:3001
-NEXT_PUBLIC_WS_URL=ws://localhost:3001
-```
-
-### Worker (.env)
-
-```env
-TRIGGER_API_KEY="your-trigger-api-key"
-TRIGGER_API_URL="http://localhost:3030"
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/wsflows"
-ENCRYPTION_KEY="same-key-as-api"
+NEXT_PUBLIC_API_URL=http://localhost:4001/api
+NEXT_PUBLIC_WS_URL=ws://localhost:4001
 ```
 
 ---
@@ -240,8 +215,6 @@ ENCRYPTION_KEY="same-key-as-api"
 ### docker-compose.yml
 
 ```yaml
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -250,7 +223,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: wsflows
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -262,7 +235,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -270,56 +243,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
-  trigger:
-    image: triggerdev/trigger:latest
-    ports:
-      - "3030:3030"
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/trigger
-      REDIS_URL: redis://redis:6379
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  api:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.api
-    ports:
-      - "3001:3001"
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/wsflows
-      REDIS_URL: redis://redis:6379
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  web:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.web
-    ports:
-      - "3000:3000"
-    environment:
-      NEXT_PUBLIC_API_URL: http://api:3001
-    depends_on:
-      - api
-
-  worker:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.worker
-    environment:
-      TRIGGER_API_URL: http://trigger:3030
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/wsflows
-    depends_on:
-      - trigger
-      - postgres
+    command: redis-server --appendonly yes
 
 volumes:
   postgres_data:
@@ -391,14 +315,14 @@ pnpm typecheck
 
 ```bash
 # Check if PostgreSQL is running
-docker-compose ps postgres
+docker compose -f docker/docker-compose.yml ps
 
 # Check logs
-docker-compose logs postgres
+docker compose -f docker/docker-compose.yml logs postgres
 
 # Reset database
-docker-compose down -v
-docker-compose up -d postgres
+docker compose -f docker/docker-compose.yml down -v
+docker compose -f docker/docker-compose.yml up -d postgres
 pnpm db:migrate
 ```
 
@@ -412,20 +336,10 @@ pnpm db:generate
 
 ```bash
 # Find process using port
-lsof -i :3001
+lsof -i :4001
 
 # Kill process
 kill -9 <PID>
-```
-
-### Trigger.dev worker not connecting
-
-```bash
-# Check Trigger.dev is running
-curl http://localhost:3030/health
-
-# Restart worker
-pnpm dev:worker
 ```
 
 ---

@@ -10,7 +10,6 @@ We need to organize multiple applications and shared packages:
 
 - API backend
 - Web frontend
-- Worker for Trigger.dev
 - Shared types and utilities
 - Node definitions
 - UI components
@@ -90,8 +89,7 @@ We chose **pnpm workspaces with Turborepo**.
 ws-flows/
 ├── apps/
 │   ├── api/
-│   ├── web/
-│   └── worker/
+│   └── web/
 ├── packages/
 │   ├── shared/
 │   ├── nodes/

@@ -229,6 +229,9 @@ model Execution {
   @@map("executions")
 }
 
+// ExecutionLog - Stores metadata and optionally small data inline
+// Large inputData/outputData is externalized to object storage (MinIO/S3)
+// Reference fields (inputDataRef/outputDataRef) point to externalized data
 model ExecutionLog {
   id          String        @id @default(uuid())
   executionId String        @map("execution_id")
@@ -236,8 +239,13 @@ model ExecutionLog {
   nodeType    String        @map("node_type")
   nodeName    String?       @map("node_name")
   status      NodeLogStatus @default(PENDING)
+  // Inline data (small payloads) or summary (if externalized)
   inputData   Json?         @map("input_data")
   outputData  Json?         @map("output_data")
+  // References to externalized data in object storage (MinIO/S3)
+  // Format: { bucket, key, size, compressed, checksum, storedAt }
+  inputDataRef  Json?       @map("input_data_ref")
+  outputDataRef Json?       @map("output_data_ref")
   error       String?
   startedAt   DateTime?     @map("started_at")
   finishedAt  DateTime?     @map("finished_at")
@@ -602,27 +610,15 @@ enum AlertSeverity {
 }
 
 // ============================================================================
-// NODE RESULT CACHE
+// NODE RESULT CACHE - MIGRATED TO REDIS
 // ============================================================================
-
-model NodeResultCache {
-  id           String   @id @default(uuid())
-  workflowId   String   @map("workflow_id")
-  nodeId       String   @map("node_id")
-  nodeType     String   @map("node_type")
-  inputHash    String   @map("input_hash") // SHA256 of input data
-  outputData   Json     @map("output_data")
-  ttlSeconds   Int      @default(3600) @map("ttl_seconds") // 1 hour default
-  hitCount     Int      @default(0) @map("hit_count")
-  lastHitAt    DateTime? @map("last_hit_at")
-  expiresAt    DateTime @map("expires_at")
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  @@unique([workflowId, nodeId, inputHash])
-  @@index([workflowId, nodeId])
-  @@index([expiresAt])
-  @@map("node_result_cache")
-}
+// NOTE: NodeResultCache has been migrated to Redis for better performance.
+// Cache operations now go through Redis with native TTL-based expiration.
+// This reduces PostgreSQL I/O load significantly.
+// See: NodeCacheService in apps/api/src/modules/cache/node-cache.service.ts
+//
+// Redis key pattern: node-cache:{workflowId}:{nodeId}:{inputHash}
+// TTL: Configurable per-node, default 1 hour
 
 // ============================================================================
 // WORKFLOW TEMPLATES
@@ -1050,16 +1046,16 @@ enum ReviewStatus {
 // REAL-TIME COLLABORATION
 // ============================================================================
 
+// WorkflowSession - Stores persistent session metadata only
+// Ephemeral data (cursor position, viewport) is managed in Redis for performance
+// Redis keys: collab:workflow:{id}:users, collab:cursor:{socketId}, collab:viewport:{socketId}
 model WorkflowSession {
   id            String   @id @default(uuid())
   workflowId    String   @map("workflow_id")
   userId        String   @map("user_id")
   socketId      String   @map("socket_id")
-  cursorX       Float?   @map("cursor_x")
-  cursorY       Float?   @map("cursor_y")
-  viewportX     Float?   @map("viewport_x")
-  viewportY     Float?   @map("viewport_y")
-  viewportZoom  Float?   @map("viewport_zoom")
+  // NOTE: cursorX, cursorY, viewportX, viewportY, viewportZoom removed
+  // These ephemeral values are now stored in Redis only (no DB writes on mouse move)
   color         String   @default("#6366f1") // Assigned collaborator color
   isActive      Boolean  @default(true) @map("is_active")
   lastHeartbeat DateTime @default(now()) @map("last_heartbeat")
@@ -1171,18 +1167,17 @@ model CollaborationLink {
   @@map("collaboration_links")
 }
 
-// Guest sessions for users joining via collaboration links
+// GuestSession - Stores persistent guest session metadata only
+// Ephemeral data (cursor position, viewport) is managed in Redis for performance
+// Redis keys: collab:guest:{sessionId}:cursor, collab:guest:{sessionId}:viewport
 model GuestSession {
   id              String            @id @default(uuid())
   linkId          String            @map("link_id")
   guestName       String            @map("guest_name")
   guestColor      String            @map("guest_color")
   socketId        String?           @map("socket_id")
-  cursorX         Float?            @map("cursor_x")
-  cursorY         Float?            @map("cursor_y")
-  viewportX       Float?            @map("viewport_x")
-  viewportY       Float?            @map("viewport_y")
-  viewportZoom    Float?            @map("viewport_zoom")
+  // NOTE: cursorX, cursorY, viewportX, viewportY, viewportZoom removed
+  // These ephemeral values are now stored in Redis only (no DB writes on mouse move)
   isActive        Boolean           @default(true) @map("is_active")
   lastHeartbeat   DateTime          @default(now()) @map("last_heartbeat")
   connectedAt     DateTime          @default(now()) @map("connected_at")
