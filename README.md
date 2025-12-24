@@ -1,20 +1,19 @@
 <p align="center">
-  <img src="logo-nocta-wave.png" alt="WS-Flows Logo" width="200" />
+  <img src="logo-nocta-wave.png" alt="Nocta Wave Logo" width="200" />
 </p>
 
-<h1 align="center">WS-Flows</h1>
+<h1 align="center">Nocta Wave</h1>
 
 <p align="center">
-  <strong>Plateforme d'automatisation de workflows open-source</strong>
+  <strong>Plateforme d'orchestration de workflows open-source et self-hostable</strong>
   <br />
-  <em>Alternative moderne à n8n construite avec NestJS & Next.js</em>
+  <em>Alternative moderne à n8n avec collaboration temps réel</em>
 </p>
 
 <p align="center">
   <a href="#fonctionnalités">Fonctionnalités</a> •
   <a href="#technologies">Technologies</a> •
   <a href="#installation">Installation</a> •
-  <a href="#déploiement">Déploiement</a> •
   <a href="#architecture">Architecture</a> •
   <a href="#contribution">Contribution</a>
 </p>
@@ -22,114 +21,108 @@
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.1.0-blue.svg" alt="Version" />
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License" />
-  <img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg" alt="Node" />
+  <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg" alt="Node" />
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome" />
-  <img src="https://img.shields.io/badge/coolify-ready-purple.svg" alt="Coolify Ready" />
+  <img src="https://img.shields.io/badge/self--hosted-ready-purple.svg" alt="Self-hosted Ready" />
 </p>
 
 ---
 
 ## À propos
 
-**WS-Flows** est une plateforme d'automatisation de workflows visuelle et intuitive, inspirée de n8n. Elle permet de créer, gérer et exécuter des workflows complexes grâce à une interface drag-and-drop moderne.
+**Nocta Wave** est une plateforme d'orchestration de workflows visuelle et self-hostable. Elle permet de créer, gérer et exécuter des workflows complexes grâce à une interface drag-and-drop moderne avec collaboration en temps réel.
 
-Construite avec une architecture monorepo moderne, WS-Flows offre une solution complète pour automatiser vos processus métier, intégrer vos applications et orchestrer vos données.
+### Pourquoi Nocta Wave ?
 
-## Aperçu de l'architecture
+- **Self-hostable** : Gardez le contrôle total de vos données
+- **Collaboration temps réel** : Éditez les workflows à plusieurs avec curseurs partagés
+- **Architecture moderne** : Séparation Control Plane / Data Plane pour la scalabilité
+- **Sécurité intégrée** : Chiffrement des credentials, masquage automatique des secrets dans les logs
+
+## Architecture
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│                 │     │                 │     │                 │
-│   Next.js Web   │────▶│   NestJS API    │────▶│  Trigger.dev    │
-│   (Frontend)    │     │   (Backend)     │     │   (Worker)      │
-│                 │     │                 │     │                 │
-└─────────────────┘     └────────┬────────┘     └─────────────────┘
-                                 │
-                    ┌────────────┴────────────┐
-                    │                         │
-              ┌─────▼─────┐            ┌──────▼─────┐
-              │           │            │            │
-              │ PostgreSQL│            │   Redis    │
-              │           │            │            │
-              └───────────┘            └────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                       CONTROL PLANE                              │
+│              (API REST, WebSocket, UI-facing)                    │
+├─────────────────────────────────────────────────────────────────┤
+│  Auth │ User │ Team │ Workflow │ Credential │ Collaboration     │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+              ┌─────────────┴─────────────┐
+              │          REDIS            │
+              │    (Queue / Cache)        │
+              └─────────────┬─────────────┘
+                            │
+┌───────────────────────────┴─────────────────────────────────────┐
+│                        DATA PLANE                                │
+│           (Execution Engine, Background Jobs)                    │
+├─────────────────────────────────────────────────────────────────┤
+│  Worker │ Execution │ Webhook Ingestion │ Storage (S3/MinIO)    │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+              ┌─────────────┴─────────────┐
+              │        PostgreSQL         │
+              │      (Persistent Data)    │
+              └───────────────────────────┘
 ```
 
 ## Fonctionnalités
 
 ### Éditeur Visuel
-- **Drag & Drop** - Interface intuitive pour créer des workflows
-- **40+ Nodes** - Intégrations prêtes à l'emploi (Slack, GitHub, OpenAI, etc.)
-- **Minimap** - Navigation rapide dans les workflows complexes
-- **Groupes de nodes** - Organisation visuelle des workflows
-- **Debug Mode** - Points d'arrêt et inspection des données en temps réel
-- **Undo/Redo** - Historique complet des modifications
-- **Copy/Paste** - Duplication rapide de nodes
+- **Drag & Drop** : Interface intuitive basée sur React Flow
+- **Minimap** : Navigation rapide dans les workflows complexes
+- **Undo/Redo** : Historique complet des modifications
+- **Copy/Paste** : Duplication rapide de nodes
 
-### Collaboration
-- **Commentaires** - Discussions sur les workflows et nodes avec threads
-- **Tags & Labels** - Organisation et catégorisation par couleur
-- **Historique des versions** - Diff visuel et restauration
-- **Templates** - Bibliothèque de workflows réutilisables
-- **Import/Export JSON** - Partage facile des workflows
+### Collaboration Temps Réel
+- **Curseurs partagés** : Voyez où travaillent vos collaborateurs
+- **Chat intégré** : Discussions contextuelles sur les workflows
+- **Liens de partage** : Invitez des guests avec permissions VIEW/COMMENT/EDIT
+- **Historique des changements** : Suivi de toutes les modifications
 
 ### Exécution
-- **Triggers multiples** - Manuel, Cron, Webhook, Polling HTTP
-- **Logs temps réel** - Suivi des exécutions via WebSocket
-- **Retry automatique** - Gestion des erreurs robuste
-- **Variables d'environnement** - Configuration flexible
+- **Triggers multiples** : Manuel, Cron, Webhook
+- **Logs temps réel** : Suivi via WebSocket/SSE
+- **Retry automatique** : Gestion des erreurs avec circuit breaker
+- **Dead Letter Queue** : Récupération des exécutions échouées
+- **Cache intelligent** : Optimisation des nodes répétitifs
 
 ### Sécurité
-- **Multi-tenant** - Équipes et permissions RBAC
-- **Credentials chiffrés** - AES-256-GCM pour les secrets
-- **JWT + Refresh Tokens** - Authentification sécurisée
-- **API Keys** - Accès programmatique avec scopes
+- **Multi-tenant** : Équipes et permissions RBAC
+- **Credentials chiffrés** : AES-256-GCM
+- **Masquage des secrets** : Redaction automatique dans les logs
+- **Permissions WebSocket** : Contrôle strict VIEW/COMMENT/EDIT
+
+### Performance & Scalabilité
+- **Stockage externe** : Logs volumineux sur S3/MinIO
+- **Cache Redis** : Données éphémères hors PostgreSQL
+- **Workers scalables** : Data Plane indépendant du Control Plane
 
 ## Technologies
 
-### Backend
-| Technologie | Usage |
-|-------------|-------|
-| **NestJS** | Framework API REST |
-| **Prisma** | ORM et migrations |
-| **PostgreSQL** | Base de données principale |
-| **Redis** | Cache et files d'attente |
-| **Socket.io** | WebSocket temps réel |
-| **Trigger.dev** | Exécution des jobs |
-
-### Frontend
-| Technologie | Usage |
-|-------------|-------|
-| **Next.js 14** | Framework React avec App Router |
-| **React Flow** | Éditeur de workflow visuel |
-| **Tailwind CSS** | Styling utilitaire |
-| **shadcn/ui** | Composants UI |
-| **Zustand** | State management |
-| **React Query** | Data fetching |
-
-### Infra & DevOps
-| Technologie | Usage |
-|-------------|-------|
-| **pnpm** | Package manager |
-| **Turborepo** | Build system monorepo |
-| **Docker** | Conteneurisation |
-| **Coolify** | Déploiement PaaS |
-| **TypeScript** | Typage statique |
+| Composant | Technologies |
+|-----------|--------------|
+| **Backend** | NestJS, Prisma, PostgreSQL, Redis, Socket.io |
+| **Frontend** | Next.js 15, React 18, React Flow, Tailwind CSS, shadcn/ui |
+| **State** | Zustand, React Query |
+| **Monorepo** | pnpm workspaces, Turborepo |
+| **Stockage** | S3/MinIO (optionnel) |
 
 ## Installation
 
 ### Prérequis
 
-- **Node.js** >= 18.x
+- **Node.js** >= 20.x
 - **pnpm** >= 8.x
 - **Docker** & Docker Compose
-- **Git**
 
-### Quick Start (Développement)
+### Quick Start
 
 ```bash
 # 1. Cloner le repository
-git clone https://github.com/your-org/ws-flows.git
-cd ws-flows
+git clone https://github.com/your-org/nocta-wave.git
+cd nocta-wave
 
 # 2. Installer les dépendances
 pnpm install
@@ -138,37 +131,43 @@ pnpm install
 cp .env.example .env
 
 # 4. Démarrer les services (PostgreSQL + Redis)
-docker compose -f docker/docker-compose.yml up -d
+pnpm docker:up
 
-# 5. Générer le client Prisma et appliquer les migrations
-cd apps/api
+# 5. Setup de la base de données
 pnpm db:generate
 pnpm db:migrate
-pnpm db:seed  # Crée un admin par défaut
+pnpm db:seed
 
-# 6. Démarrer en mode développement (depuis la racine)
-cd ../..
+# 6. Démarrer en développement
 pnpm dev
 ```
 
-### Variables d'environnement
+### URLs par défaut
 
-Créez un fichier `.env` à la racine du projet :
+| Application | URL |
+|-------------|-----|
+| **Web App** | http://localhost:4000 |
+| **API** | http://localhost:4001 |
+| **API Docs** | http://localhost:4001/docs |
+
+### Credentials par défaut
+
+| | |
+|---|---|
+| **Email** | `admin@nocta.local` |
+| **Password** | `admin123` |
+
+## Variables d'environnement
 
 ```env
 # Base de données
-DATABASE_URL="postgresql://postgres:password@localhost:5434/wsflows"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5434/noctawave"
 
 # Redis
 REDIS_URL="redis://localhost:6380"
 
-# JWT
+# Sécurité
 JWT_SECRET="your-super-secret-key-min-32-chars"
-JWT_EXPIRES_IN="15m"
-REFRESH_TOKEN_SECRET="your-refresh-secret-key"
-REFRESH_TOKEN_EXPIRES_IN="7d"
-
-# Encryption (credentials)
 ENCRYPTION_KEY="your-32-char-encryption-key-here"
 
 # API
@@ -178,322 +177,133 @@ CORS_ORIGIN="http://localhost:4000"
 # Frontend
 NEXT_PUBLIC_API_URL="http://localhost:4001/api"
 
-# Admin (pour le seed)
-ADMIN_PASSWORD="admin123"
+# Stockage externe (optionnel)
+OBJECT_STORAGE_ENABLED=false
+OBJECT_STORAGE_ENDPOINT="http://localhost:9000"
+OBJECT_STORAGE_ACCESS_KEY="minioadmin"
+OBJECT_STORAGE_SECRET_KEY="minioadmin"
+OBJECT_STORAGE_BUCKET="nocta-logs"
 ```
 
-### Accès aux applications
-
-| Application | URL | Description |
-|-------------|-----|-------------|
-| **Web App** | http://localhost:4000 | Interface utilisateur |
-| **API** | http://localhost:4001 | Backend REST API |
-| **API Docs** | http://localhost:4001/docs | Swagger Documentation |
-
-### Credentials par défaut
-
-| | |
-|---|---|
-| **Email** | `admin@wsflows.local` |
-| **Password** | `admin123` (ou valeur de `ADMIN_PASSWORD`) |
-
-## Déploiement
-
-### Coolify (Recommandé)
-
-WS-Flows est prêt pour un déploiement en un clic sur Coolify.
-
-#### 1. Créer un projet dans Coolify
-
-- Nouveau projet → "WS-Flows"
-- Ajouter une ressource → "Docker Compose"
-
-#### 2. Configuration
-
-- **Source** : Votre repo Git
-- **Docker Compose Location** : `docker/docker-compose.coolify.yml`
-
-#### 3. Variables d'environnement
-
-```env
-# Sécurité (OBLIGATOIRE - générer des valeurs uniques)
-JWT_SECRET=<openssl rand -base64 64>
-REFRESH_TOKEN_SECRET=<openssl rand -base64 64>
-ENCRYPTION_KEY=<openssl rand -hex 32>
-POSTGRES_PASSWORD=<mot-de-passe-db-fort>
-
-# Admin
-ADMIN_PASSWORD=votre-mot-de-passe-admin
-
-# URLs (adapter à vos domaines)
-CORS_ORIGIN=https://wsflows.votre-domaine.com
-NEXT_PUBLIC_API_URL=https://api.wsflows.votre-domaine.com
-```
-
-#### 4. Domaines
-
-| Service | Domaine | Port |
-|---------|---------|------|
-| `web` | wsflows.votre-domaine.com | 3000 |
-| `api` | api.wsflows.votre-domaine.com | 3001 |
-
-#### 5. Déployer
-
-C'est tout ! L'application :
-- Applique les migrations automatiquement
-- Crée un utilisateur admin
-- Crée une équipe par défaut
-- Crée des tags et templates de démarrage
-
-### Docker Compose (Manuel)
-
-```bash
-# Production
-docker compose -f docker/docker-compose.prod.yml up -d
-
-# Voir les logs
-docker compose -f docker/docker-compose.prod.yml logs -f
-```
-
-### Déploiement manuel
-
-1. **Build** tous les packages : `pnpm build`
-2. **API** : Déployer `apps/api/dist` sur Node.js
-3. **Web** : Export statique ou serveur Node.js
-4. **Worker** : Trigger.dev CLI ou self-hosted
-
-## Commandes pnpm
+## Commandes
 
 ```bash
 # Développement
-pnpm dev                    # Démarrer tous les services
-pnpm dev --filter @ws-flows/api   # API uniquement
-pnpm dev --filter @ws-flows/web   # Frontend uniquement
+pnpm dev                    # Démarrer API + Web
+pnpm dev:api                # API uniquement
+pnpm dev:web                # Frontend uniquement
 
 # Build
 pnpm build                  # Build tous les packages
-pnpm --filter @ws-flows/api build
-pnpm --filter @ws-flows/web build
 
-# Base de données (depuis apps/api)
-pnpm db:generate           # Générer le client Prisma
-pnpm db:migrate            # Appliquer les migrations
-pnpm db:studio             # Ouvrir Prisma Studio
-pnpm db:seed               # Seed la base de données
-
-# Linting
-pnpm lint                   # Lint tous les packages
+# Base de données
+pnpm db:generate            # Générer le client Prisma
+pnpm db:migrate             # Appliquer les migrations
+pnpm db:studio              # Ouvrir Prisma Studio
 
 # Tests
-pnpm test                   # Exécuter tous les tests
+pnpm test                   # Tests unitaires
+pnpm test:e2e:docker        # Tests E2E (avec Docker)
+pnpm test:e2e:docker:down   # Cleanup containers de test
+
+# Docker
+pnpm docker:up              # Démarrer PostgreSQL + Redis
+pnpm docker:down            # Arrêter les services
 ```
 
-## Architecture
+## Structure du Projet
 
 ```
-ws-flows/
+nocta-wave/
 ├── apps/
 │   ├── api/                    # Backend NestJS
 │   │   ├── src/
 │   │   │   ├── modules/        # Feature modules
-│   │   │   │   ├── auth/       # Authentification JWT
-│   │   │   │   ├── user/       # Gestion utilisateurs
-│   │   │   │   ├── team/       # Équipes & RBAC
-│   │   │   │   ├── workflow/   # Gestion des workflows
+│   │   │   │   ├── auth/       # Authentification
+│   │   │   │   ├── workflow/   # Gestion workflows
 │   │   │   │   ├── execution/  # Exécution & logs
-│   │   │   │   ├── credential/ # Credentials chiffrés
-│   │   │   │   ├── collaboration/ # Commentaires, tags, templates
-│   │   │   │   ├── node/       # Registry des nodes
-│   │   │   │   ├── webhook/    # Endpoints webhook
-│   │   │   │   └── health/     # Health checks
-│   │   │   ├── database/       # Prisma service
-│   │   │   └── worker/         # Job execution
-│   │   └── prisma/             # Schema & migrations
+│   │   │   │   ├── collaboration/ # Temps réel
+│   │   │   │   ├── storage/    # S3/MinIO
+│   │   │   │   └── security/   # Redaction
+│   │   │   ├── worker/         # Job processor
+│   │   │   └── database/       # Prisma
+│   │   ├── prisma/             # Schema & migrations
+│   │   └── test/               # Tests unitaires & E2E
 │   │
-│   ├── web/                    # Frontend Next.js
-│   │   ├── src/
-│   │   │   ├── app/            # App Router pages
-│   │   │   ├── components/     # React components
-│   │   │   │   ├── ui/         # shadcn/ui components
-│   │   │   │   └── workflow-editor/
-│   │   │   ├── hooks/          # Custom hooks
-│   │   │   ├── stores/         # Zustand stores
-│   │   │   └── lib/            # Utilities & API client
-│   │   └── public/
-│   │
-│   └── worker/                 # Trigger.dev worker
+│   └── web/                    # Frontend Next.js
+│       └── src/
+│           ├── app/            # App Router pages
+│           ├── components/     # React components
+│           ├── stores/         # Zustand stores
+│           └── lib/            # Utilities
 │
 ├── packages/
 │   ├── shared/                 # Types & schemas partagés
-│   │   └── src/
-│   │       ├── types/          # TypeScript types
-│   │       └── schemas/        # Zod schemas
-│   │
-│   └── nodes/                  # SDK de création de nodes
-│       └── src/
-│           ├── triggers/       # Nodes de déclenchement
-│           ├── http/           # HTTP Request/Response
-│           ├── transform/      # Transformation de données
-│           ├── logic/          # Logique conditionnelle
-│           ├── database/       # Connecteurs DB
-│           ├── integrations/   # APIs tierces
-│           └── utility/        # Utilitaires
+│   └── nodes/                  # Node definitions & runners
 │
-├── docker/                     # Configuration Docker
+├── docker/                     # Docker configs
 │   ├── docker-compose.yml      # Développement
-│   ├── docker-compose.coolify.yml  # Coolify
-│   ├── docker-compose.prod.yml # Production
-│   ├── Dockerfile.api
-│   ├── Dockerfile.web
-│   └── Dockerfile.worker
+│   ├── docker-compose.test.yml # Tests E2E
+│   └── docker-compose.prod.yml # Production
 │
-├── docs/                       # Documentation
-└── logo-nocta-wave.png         # Logo du projet
+└── docs/                       # Documentation
+    ├── architecture/           # Architecture decisions
+    └── guides/                 # Guides développeur
 ```
 
-### Nodes disponibles (40+)
+## Tests
 
-| Catégorie | Nodes |
-|-----------|-------|
-| **Triggers** | Manual, Cron, Webhook, HTTP Poll |
-| **HTTP** | Request, Response |
-| **Transform** | Set, Map, Filter, Merge, Split, Aggregate, Sort, Code |
-| **Logic** | Condition, Switch, Loop, Wait, Stop |
-| **Database** | PostgreSQL, MySQL, MongoDB, Redis |
-| **Integrations** | Slack, Discord, GitHub, Gmail, Google Sheets, Notion, Airtable, Stripe, Twilio, SendGrid, AWS S3, OpenAI, RSS |
-| **Utility** | Delay, Crypto, DateTime, HTML Parse, Log, Debug, JSON Parse, Error |
+### Stratégie de Tests
 
-## Création de nodes personnalisés
-
-```typescript
-import { createNode, input, output } from '@ws-flows/nodes';
-
-export const myCustomNode = createNode(
-  {
-    type: 'custom.my-node',
-    category: 'custom',
-    name: 'My Custom Node',
-    description: 'Does something amazing',
-    icon: 'Sparkles',
-    inputs: [
-      input.string('message', 'Message to process'),
-      input.number('count', 'Number of times', { default: 1 }),
-    ],
-    outputs: [
-      output.string('result', 'Processed result'),
-    ],
-  },
-  async (input, context) => {
-    const { message, count } = input.config;
-    const result = message.repeat(count).toUpperCase();
-
-    context.logger.info('Processing complete', { result });
-
-    return { data: { result } };
-  }
-);
+```
+┌─────────────┐
+│    E2E      │  Tests complets API → Queue → Worker → DB
+└──────┬──────┘
+┌──────┴──────┐
+│ Integration │  Tests modules avec mocks
+└──────┬──────┘
+┌──────┴──────┐
+│    Unit     │  Tests isolés (nodes, services)
+└─────────────┘
 ```
 
-Consultez [packages/nodes/README.md](packages/nodes/README.md) pour la documentation complète.
-
-## API Reference
-
-### Authentification
+### Lancer les tests E2E
 
 ```bash
-# Inscription
-POST /api/auth/register
-{ "email": "user@example.com", "password": "password123", "name": "John Doe" }
+# Démarre les containers de test, setup DB, exécute les tests
+pnpm test:e2e:docker
 
-# Connexion
-POST /api/auth/login
-{ "email": "user@example.com", "password": "password123" }
-
-# Refresh Token
-POST /api/auth/refresh
-{ "refreshToken": "..." }
+# Nettoyage
+pnpm test:e2e:docker:down
 ```
 
-### Workflows
+## Documentation
 
-```bash
-# Lister les workflows
-GET /api/workflows
-Authorization: Bearer <token>
-
-# Créer un workflow
-POST /api/workflows
-{ "name": "Mon Workflow", "description": "...", "graph": { "nodes": [], "edges": [] } }
-
-# Exécuter un workflow
-POST /api/executions
-{ "workflowId": "uuid", "triggerType": "MANUAL" }
-
-# Exporter un workflow
-GET /api/workflows/:id/export
-
-# Importer un workflow
-POST /api/workflows/import
-```
-
-La documentation complète de l'API est disponible sur `/docs`.
+- [Architecture Overview](docs/architecture/overview.md)
+- [Testing Guide](docs/guides/testing.md)
+- [Node Development](docs/nodes/development-guide.md)
+- [Getting Started](docs/guides/getting-started.md)
 
 ## Contribution
 
 Les contributions sont les bienvenues !
 
-### Développement local
-
 1. **Fork** le repository
 2. Créez une **branche** (`git checkout -b feature/amazing-feature`)
-3. **Commit** vos changements (`git commit -m 'Add amazing feature'`)
-4. **Push** vers la branche (`git push origin feature/amazing-feature`)
+3. **Commit** vos changements
+4. **Push** vers la branche
 5. Ouvrez une **Pull Request**
-
-### Création de nodes
-
-Pour créer un nouveau node, suivez le guide dans [docs/nodes/](docs/nodes/).
-
-Chaque node doit inclure :
-- Definition avec Zod schema
-- Tests unitaires
-- Documentation
-- Exemple d'utilisation
 
 ## Roadmap
 
-Consultez notre [ROADMAP.md](ROADMAP.md) pour les fonctionnalités planifiées :
-
-- Sub-workflows réutilisables
-- Variables & Environnements (dev/staging/prod)
-- Testing Framework intégré
-- API GraphQL
-- Plus d'intégrations (Salesforce, HubSpot, Jira, Linear, etc.)
-- OAuth 2.0 avec refresh automatique
-- Circuit breaker et retry avancé
-
-## Documentation
-
-- [Architecture Overview](docs/architecture/overview.md)
-- [API Reference](docs/api/overview.md)
-- [Node Development Guide](docs/nodes/development-guide.md)
-- [Getting Started](docs/guides/getting-started.md)
+Consultez [ROADMAP.md](ROADMAP.md) pour les fonctionnalités planifiées.
 
 ## License
 
-Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
-
-## Remerciements
-
-- [n8n](https://n8n.io) - Inspiration pour le concept d'automatisation de workflows
-- [Trigger.dev](https://trigger.dev) - Exécution des jobs en arrière-plan
-- [React Flow](https://reactflow.dev) - Éditeur de workflow visuel
-- [shadcn/ui](https://ui.shadcn.com) - Composants UI élégants
-- [Prisma](https://prisma.io) - ORM moderne pour TypeScript
-- [Coolify](https://coolify.io) - PaaS open-source pour le déploiement
+Ce projet est sous licence MIT. Voir [LICENSE](LICENSE).
 
 ---
 
 <p align="center">
-  Fait avec ❤️ par l'équipe WS-Flows
+  Fait avec ❤️ par l'équipe Nocta Wave
 </p>
