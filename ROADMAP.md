@@ -1,163 +1,396 @@
-# WS-Flows Roadmap
+# Nocta Wave - Roadmap
 
-Ce document décrit les améliorations prioritaires à apporter au projet pour garantir sa stabilité, sa scalabilité et sa sécurité en production.
-
----
-
-## 1. Performance et Scalabilité de la Base de Données (Priorité Haute)
-
-Le modèle de données actuel risque de saturer PostgreSQL très rapidement en production.
-
-### 1.1 Externaliser les logs d'exécution
-
-**Problème actuel :** La table `ExecutionLog` stocke les entrées/sorties (`inputData`, `outputData`) en format JSON directement dans la base relationnelle.
-
-**Recommandation :**
-- [ ] Déplacer les données volumineuses vers un stockage objet (S3, MinIO) ou une base dédiée aux logs (ClickHouse, ElasticSearch)
-- [ ] PostgreSQL ne doit garder que les métadonnées légères (status, timestamps, références aux fichiers)
-- [ ] Implémenter un système de rétention avec archivage automatique des vieux logs
-
-### 1.2 Migrer le cache vers Redis
-
-**Problème actuel :** La table `NodeResultCache` stocke les résultats de nœuds pour éviter de les recalculer.
-
-**Recommandation :**
-- [ ] Migrer ce cache vers Redis (déjà présent dans l'infrastructure)
-- [ ] Utiliser les fonctionnalités TTL natives de Redis pour la gestion automatique de l'expiration
-- [ ] Réduire ainsi la charge I/O sur la base principale
-
-### 1.3 Optimiser la gestion du temps réel
-
-**Problème actuel :** Les tables `WorkflowSession`, `GuestSession` et les coordonnées des curseurs (`cursorX`, `cursorY`) sont définies dans PostgreSQL.
-
-**Recommandation :**
-- [ ] Gérer l'état "éphémère" (mouvements de souris, présence) uniquement en mémoire via Redis et WebSockets
-- [ ] Ne persister en base que les données durables (commentaires, sessions terminées pour audit)
-- [ ] Supprimer les colonnes `cursorX`, `cursorY` du schéma PostgreSQL
+Ce document décrit les améliorations et fonctionnalités planifiées pour Nocta Wave.
 
 ---
 
-## 2. Simplification de l'Infrastructure et Dépendances
+## Statut des Améliorations Techniques
 
-L'architecture actuelle est très lourde pour un déploiement "self-hosted" ou local.
+### Complété
 
-### 2.1 Réduire la dépendance forte à Trigger.dev
-
-**Problème actuel :** Le choix de Trigger.dev v3 oblige à déployer une stack complexe (Postgres dédié, ElectricSQL, Coordinator, etc.) juste pour faire tourner le worker.
-
-**Recommandation :**
-- [ ] Créer une interface d'abstraction `WorkflowExecutor` pour l'exécution des workflows
-- [ ] Implémenter un moteur d'exécution "Lite" basé sur BullMQ/Redis pour :
-  - Le développement local
-  - Les petites instances self-hosted
-- [ ] Garder Trigger.dev comme option pour le mode Enterprise/Scale
-- [ ] Documenter les deux modes d'exécution
-
-### 2.2 Stabiliser les versions de dépendances
-
-**Problème actuel :** Le frontend utilise des versions potentiellement instables de Next.js et React.
-
-**Recommandation :**
-- [ ] Auditer toutes les dépendances du projet
-- [ ] Repasser sur des versions LTS stables (Next.js 14/15, React 18)
-- [ ] Documenter les versions minimales requises
-- [ ] Mettre en place Dependabot ou Renovate pour les mises à jour de sécurité
+| Item | Description | Status |
+|------|-------------|--------|
+| **Stockage externe logs** | Logs volumineux externalisés vers S3/MinIO | ✅ Fait |
+| **Cache Redis** | NodeResultCache migré vers Redis | ✅ Fait |
+| **Données éphémères Redis** | Curseurs, viewports stockés uniquement en Redis | ✅ Fait |
+| **Masquage des secrets** | RedactionService pour masquer les données sensibles | ✅ Fait |
+| **Permissions WebSocket** | Vérification stricte VIEW/COMMENT/EDIT | ✅ Fait |
+| **Segmentation Control/Data Plane** | Documentation et séparation logique | ✅ Fait |
+| **Dépendances stables** | Next.js 15, React 18 LTS | ✅ Fait |
+| **Tests E2E** | Infrastructure complète avec Docker | ✅ Fait |
+| **Sécurité DLQ** | Vérification d'accès team sur toutes les opérations | ✅ Fait |
 
 ---
 
-## 3. Sécurité et Confidentialité des Données
+## Phase 1 : Fonctionnalités Core (Court terme)
 
-### 3.1 Masquage des secrets (Redaction)
+### 1.1 Sub-workflows Réutilisables
 
-**Problème actuel :** Les workflows manipulent souvent des clés API ou des mots de passe. Avec le stockage actuel des `inputData` en JSON brut, ces secrets sont lisibles en clair.
+**Objectif :** Permettre d'encapsuler des workflows comme des "fonctions" réutilisables.
 
-**Recommandation :**
-- [ ] Implémenter un middleware de redaction qui détecte les valeurs sensibles
-- [ ] Patterns à détecter : `password`, `secret`, `api_key`, `token`, `authorization`, etc.
-- [ ] Remplacer automatiquement par `******` avant l'écriture en base
-- [ ] Permettre la configuration de patterns personnalisés
+- [ ] Créer un type de node `subworkflow.call`
+- [ ] Interface pour mapper les inputs/outputs du sub-workflow
+- [ ] Gestion de la récursion (limite de profondeur)
+- [ ] Visualisation des sub-workflows imbriqués
+- [ ] Versioning des sub-workflows (quelle version utiliser)
 
-### 3.2 Sécurisation des liens de collaboration
+### 1.2 Variables et Environnements
 
-**Problème actuel :** Le système permet des accès "Guest" via `CollaborationLink`.
+**Objectif :** Supporter plusieurs environnements (dev, staging, prod) avec des variables différentes.
 
-**Recommandation :**
-- [ ] Vérifier côté Backend (NestJS) que les WebSockets contrôlent strictement les permissions (VIEW, EDIT) à chaque message reçu
-- [ ] Un invité en lecture seule ne doit pas pouvoir envoyer d'événements de modification (`NODE_MOVED`, `NODE_DELETED`, etc.)
-- [ ] Implémenter un rate limiting sur les endpoints publics
-- [ ] Ajouter des logs d'audit pour les accès guests
+- [ ] Modèle `EnvironmentVariable` avec valeurs par environnement
+- [ ] Interface de promotion entre environnements
+- [ ] Secrets par environnement (credentials différents)
+- [ ] Indicateur visuel de l'environnement actif dans l'éditeur
+- [ ] Logs séparés par environnement
 
----
+### 1.3 Mode Debug Avancé
 
-## 4. Architecture Backend (NestJS)
+**Objectif :** Améliorer le debugging des workflows.
 
-### 4.1 Segmentation des services
+- [ ] Points d'arrêt (breakpoints) sur les nodes
+- [ ] Exécution pas-à-pas
+- [ ] Inspection des données à chaque étape
+- [ ] Modification des données en cours d'exécution (hot reload)
+- [ ] Replay d'une exécution avec données modifiées
 
-**Problème actuel :** La structure actuelle suggère une monolithisation logique.
+### 1.4 Versioning Git-like des Workflows
 
-**Recommandation :**
-- [ ] S'assurer que la logique métier (Business Logic) est dans les Services, pas dans les Controllers
-- [ ] Séparer clairement le "Control Plane" du "Data Plane" :
-  - **Control Plane** : Gestion des utilisateurs, CRUD workflows, configuration
-  - **Data Plane** : Exécution, Ingestion de Webhooks, temps réel
-- [ ] Éviter qu'une surcharge d'exécution ne ralentisse l'interface utilisateur
-- [ ] Envisager des queues séparées pour les opérations critiques
+**Objectif :** Historique complet avec branches et merges.
 
-### 4.2 Gestion des erreurs et observabilité
-
-**Recommandation :**
-- [ ] Implémenter un système centralisé de gestion des erreurs
-- [ ] Ajouter des métriques Prometheus/OpenTelemetry
-- [ ] Configurer des health checks détaillés (`/health/ready`, `/health/live`)
-- [ ] Mettre en place un système de tracing distribué
+- [ ] Branches de développement pour les workflows
+- [ ] Diff visuel entre versions
+- [ ] Merge de branches avec résolution de conflits
+- [ ] Tags pour marquer les versions stables
+- [ ] Rollback en un clic
 
 ---
 
-## 5. Qualité du Code et Tests
+## Phase 2 : Intégrations et Connecteurs (Moyen terme)
 
-### 5.1 Stratégie de tests E2E
+### 2.1 Nouveaux Nodes d'Intégration
 
-**Problème actuel :** Avec une architecture distribuée (API + Worker + Trigger.dev + Redis + Postgres), les tests unitaires ne suffisent pas.
+**APIs populaires à intégrer :**
 
-**Recommandation :**
-- [ ] Renforcer les tests d'intégration qui lancent un workflow complet de bout en bout
-- [ ] Valider la chaîne complète : API -> Queue -> Worker -> DB
-- [ ] Automatiser ces tests dans la CI/CD
-- [ ] Tester spécifiquement les scénarios de collaboration temps réel
+- [ ] **CRM** : Salesforce, HubSpot, Pipedrive
+- [ ] **Project Management** : Jira, Linear, Asana, Monday
+- [ ] **Communication** : Microsoft Teams, Telegram
+- [ ] **E-commerce** : Shopify, WooCommerce, Magento
+- [ ] **Marketing** : Mailchimp, ActiveCampaign, Brevo
+- [ ] **Analytics** : Google Analytics, Mixpanel, Amplitude
+- [ ] **AI/ML** : Anthropic Claude, Gemini, Replicate, Hugging Face
+- [ ] **Storage** : Google Drive, Dropbox, OneDrive
+- [ ] **Databases** : Supabase, Firebase, DynamoDB
 
-### 5.2 Tests de charge
+### 2.2 OAuth 2.0 Avancé
 
-**Recommandation :**
-- [ ] Mettre en place des tests de charge avec k6 ou Artillery
-- [ ] Définir des seuils de performance acceptables
-- [ ] Tester les limites du système de collaboration (nombre de curseurs simultanés, etc.)
+**Objectif :** Gestion robuste des tokens OAuth.
 
-### 5.3 Documentation du code
+- [ ] Refresh automatique des tokens expirés
+- [ ] Support PKCE pour les flows publics
+- [ ] Gestion multi-compte par intégration
+- [ ] Interface de reconnexion en cas d'expiration
+- [ ] Logs d'audit des accès OAuth
 
-**Recommandation :**
-- [ ] Documenter les interfaces publiques des services
-- [ ] Générer une documentation API automatique (Swagger est déjà en place)
-- [ ] Ajouter des exemples d'utilisation pour les développeurs contribuant au projet
+### 2.3 Webhooks Avancés
+
+**Objectif :** Améliorer la robustesse des webhooks entrants.
+
+- [ ] Validation de signature (HMAC, JWT)
+- [ ] Retry avec backoff exponentiel pour webhooks sortants
+- [ ] Queue de webhooks entrants pour absorber les pics
+- [ ] Transformation des payloads à la réception
+- [ ] Webhooks conditionnels (filtrage avant exécution)
 
 ---
 
-## Priorités de développement
+## Phase 3 : Collaboration et UX (Moyen terme)
 
-| Phase | Items | Criticité |
-|-------|-------|-----------|
-| **Phase 1** | 1.3 (Temps réel), 3.2 (Sécurité WebSocket) | 🔴 Critique |
-| **Phase 2** | 1.1 (Logs), 3.1 (Redaction secrets) | 🟠 Haute |
-| **Phase 3** | 1.2 (Cache Redis), 2.2 (Dépendances) | 🟡 Moyenne |
-| **Phase 4** | 2.1 (Abstraction Worker), 4.1 (Segmentation) | 🟢 Planifiée |
-| **Phase 5** | 5.x (Tests), 4.2 (Observabilité) | 🔵 Continue |
+### 3.1 Templates Marketplace
+
+**Objectif :** Bibliothèque de workflows prêts à l'emploi.
+
+- [ ] Galerie de templates par catégorie
+- [ ] Import en un clic avec personnalisation
+- [ ] Partage de templates entre équipes
+- [ ] Rating et commentaires sur les templates
+- [ ] Templates officiels et communautaires
+
+### 3.2 Collaboration Avancée
+
+**Objectif :** Améliorer le travail en équipe.
+
+- [ ] Mentions @utilisateur dans les commentaires
+- [ ] Notifications en temps réel (in-app + email)
+- [ ] Historique d'activité par workflow
+- [ ] Mode "Suggestion" (proposer des changements sans modifier)
+- [ ] Approbations de modifications (workflow review)
+
+### 3.3 UX de l'Éditeur
+
+**Objectif :** Rendre l'éditeur plus productif.
+
+- [ ] Raccourcis clavier personnalisables
+- [ ] Commande palette (Ctrl+K) pour actions rapides
+- [ ] Recherche globale dans les workflows
+- [ ] Favoris et workflows récents
+- [ ] Mode sombre/clair avec thèmes personnalisés
+- [ ] Zoom automatique sur le node sélectionné
+- [ ] Snap-to-grid amélioré
+- [ ] Groupes de nodes pliables
+
+### 3.4 Mobile-friendly
+
+**Objectif :** Permettre la consultation sur mobile.
+
+- [ ] Vue read-only optimisée mobile
+- [ ] Monitoring des exécutions sur mobile
+- [ ] Notifications push
+- [ ] Actions rapides (pause/resume workflow)
+
+---
+
+## Phase 4 : Performance et Scale (Long terme)
+
+### 4.1 Exécution Distribuée
+
+**Objectif :** Supporter des volumes importants.
+
+- [ ] Workers horizontalement scalables
+- [ ] Partitionnement des queues par priorité/type
+- [ ] Affinité de workflow (même worker pour un workflow)
+- [ ] Execution pooling pour les workflows fréquents
+- [ ] Warm start des workers
+
+### 4.2 Optimisations Base de Données
+
+**Objectif :** Maintenir les performances à grande échelle.
+
+- [ ] Partitionnement des tables `Execution` et `ExecutionLog` par date
+- [ ] Archivage automatique vers stockage froid
+- [ ] Index optimisés pour les requêtes courantes
+- [ ] Read replicas pour les dashboards
+- [ ] Connection pooling avec PgBouncer
+
+### 4.3 Caching Intelligent
+
+**Objectif :** Réduire les calculs redondants.
+
+- [ ] Cache de résultats de nodes idempotents
+- [ ] Invalidation intelligente du cache
+- [ ] Cache distribué multi-instance
+- [ ] Préchargement des workflows fréquents
+
+### 4.4 Rate Limiting et Quotas
+
+**Objectif :** Protéger le système et permettre la multi-tenancy.
+
+- [ ] Quotas par équipe (exécutions/jour, nodes/workflow)
+- [ ] Rate limiting par endpoint API
+- [ ] Throttling des webhooks entrants
+- [ ] Alertes de dépassement de quotas
+- [ ] Dashboard d'utilisation
+
+---
+
+## Phase 5 : Observabilité et DevOps (Continue)
+
+### 5.1 Monitoring et Métriques
+
+**Objectif :** Visibilité complète sur le système.
+
+- [ ] Export Prometheus des métriques
+- [ ] Dashboards Grafana préconfigurés
+- [ ] Métriques business (exécutions, durées, erreurs)
+- [ ] Métriques infrastructure (CPU, mémoire, queues)
+- [ ] Alerting configurable (Slack, email, webhook)
+
+### 5.2 Tracing Distribué
+
+**Objectif :** Comprendre les problèmes de performance.
+
+- [ ] OpenTelemetry integration
+- [ ] Trace ID propagé dans tout le système
+- [ ] Visualisation des traces dans Jaeger/Zipkin
+- [ ] Corrélation logs/traces/métriques
+
+### 5.3 Logging Structuré
+
+**Objectif :** Logs exploitables en production.
+
+- [ ] Format JSON structuré
+- [ ] Niveaux de log configurables par module
+- [ ] Export vers ElasticSearch/Loki
+- [ ] Recherche et filtrage avancé
+- [ ] Rétention configurable
+
+### 5.4 Health Checks Avancés
+
+**Objectif :** Déploiements fiables.
+
+- [ ] `/health/live` - Liveness probe
+- [ ] `/health/ready` - Readiness probe
+- [ ] `/health/startup` - Startup probe
+- [ ] Vérification des dépendances (DB, Redis, S3)
+- [ ] Graceful shutdown
+
+---
+
+## Phase 6 : Enterprise Features (Long terme)
+
+### 6.1 Single Sign-On (SSO)
+
+**Objectif :** Intégration avec les systèmes d'identité entreprise.
+
+- [ ] SAML 2.0 support
+- [ ] OIDC/OAuth enterprise providers
+- [ ] SCIM provisioning automatique
+- [ ] Directory sync (Azure AD, Okta, Google Workspace)
+- [ ] MFA enforcement
+
+### 6.2 Audit et Compliance
+
+**Objectif :** Répondre aux exigences de conformité.
+
+- [ ] Audit logs complets et immuables
+- [ ] Export des logs pour SIEM
+- [ ] Rapports de conformité automatisés
+- [ ] Data retention policies
+- [ ] GDPR : export et suppression des données utilisateur
+
+### 6.3 Multi-région
+
+**Objectif :** Déploiement géographiquement distribué.
+
+- [ ] Données localisées par région
+- [ ] Exécution dans la région du workflow
+- [ ] Failover automatique entre régions
+- [ ] Latence optimisée
+
+### 6.4 API GraphQL
+
+**Objectif :** Alternative moderne à REST.
+
+- [ ] Schema GraphQL complet
+- [ ] Subscriptions pour le temps réel
+- [ ] Playground intégré
+- [ ] Documentation auto-générée
+
+---
+
+## Phase 7 : Écosystème et Extensions (Vision)
+
+### 7.1 Plugin System
+
+**Objectif :** Permettre l'extension par des tiers.
+
+- [ ] SDK pour créer des nodes custom
+- [ ] Marketplace de plugins
+- [ ] Sandboxing sécurisé des plugins
+- [ ] Versioning des plugins
+- [ ] Auto-update des plugins
+
+### 7.2 API Publique
+
+**Objectif :** Permettre l'intégration programmatique.
+
+- [ ] API REST documentée et versionnée
+- [ ] SDK clients (TypeScript, Python, Go)
+- [ ] Webhooks sortants configurables
+- [ ] Rate limiting et quotas API
+- [ ] API keys avec scopes
+
+### 7.3 CLI Tool
+
+**Objectif :** Gestion en ligne de commande.
+
+- [ ] `nocta-wave deploy` - Déployer un workflow
+- [ ] `nocta-wave run` - Exécuter manuellement
+- [ ] `nocta-wave logs` - Voir les logs en temps réel
+- [ ] `nocta-wave export/import` - Backup/restore
+- [ ] Intégration CI/CD
+
+### 7.4 Testing Framework
+
+**Objectif :** Tests automatisés des workflows.
+
+- [ ] Mode test avec mocks
+- [ ] Assertions sur les outputs
+- [ ] Tests de régression automatiques
+- [ ] Coverage des branches conditionnelles
+- [ ] Intégration avec CI/CD
+
+---
+
+## Idées Futures (Backlog)
+
+### Intelligence Artificielle
+- [ ] Génération de workflows par description en langage naturel
+- [ ] Suggestions de nodes basées sur le contexte
+- [ ] Détection d'anomalies dans les exécutions
+- [ ] Auto-correction des erreurs courantes
+- [ ] Chatbot assistant intégré
+
+### Low-Code/No-Code Avancé
+- [ ] Formulaires dynamiques pour les inputs
+- [ ] Dashboards personnalisables
+- [ ] Rapports automatisés
+- [ ] Intégration avec des apps no-code (Retool, Appsmith)
+
+### Scheduling Avancé
+- [ ] Calendrier visuel des exécutions planifiées
+- [ ] Dépendances entre workflows
+- [ ] Fenêtres de maintenance
+- [ ] Timezone-aware scheduling
+
+### Sécurité Avancée
+- [ ] Secrets manager intégré (Vault-like)
+- [ ] Rotation automatique des credentials
+- [ ] IP whitelisting par workflow
+- [ ] Encryption at rest configurable
+
+### Performance
+- [ ] Compilation JIT des workflows fréquents
+- [ ] Edge execution (workers proches des sources)
+- [ ] Streaming de données volumineuses
+- [ ] Compression des payloads
+
+---
+
+## Priorités de Développement
+
+| Phase | Focus | Horizon |
+|-------|-------|---------|
+| **Phase 1** | Sub-workflows, Environnements, Debug | Q1 2025 |
+| **Phase 2** | Intégrations, OAuth, Webhooks | Q2 2025 |
+| **Phase 3** | Templates, Collaboration, UX | Q2-Q3 2025 |
+| **Phase 4** | Scale, Performance | Q3 2025 |
+| **Phase 5** | Observabilité | Continue |
+| **Phase 6** | Enterprise | Q4 2025+ |
+| **Phase 7** | Écosystème | 2026+ |
 
 ---
 
 ## Contribuer
 
-Si vous souhaitez contribuer à l'une de ces améliorations, veuillez :
-1. Ouvrir une issue pour discuter de l'approche
-2. Créer une branche depuis `main`
-3. Soumettre une PR avec les tests appropriés
+Vous souhaitez contribuer à l'une de ces fonctionnalités ?
+
+1. **Discuter** : Ouvrez une issue pour discuter de l'approche
+2. **Proposer** : Créez une RFC (Request For Comments) pour les changements majeurs
+3. **Développer** : Créez une branche depuis `main`
+4. **Tester** : Incluez des tests E2E pour les nouvelles fonctionnalités
+5. **Documenter** : Mettez à jour la documentation
 
 Consultez [CLAUDE.md](./CLAUDE.md) pour les conventions de développement.
+
+---
+
+## Changelog des Décisions
+
+| Date | Décision | Raison |
+|------|----------|--------|
+| 2024-12 | Suppression Trigger.dev | Simplification self-hosted |
+| 2024-12 | Ajout stockage S3/MinIO | Scalabilité logs |
+| 2024-12 | Redis pour données éphémères | Performance temps réel |
+| 2024-12 | Architecture Control/Data Plane | Scalabilité |
+| 2024-12 | Tests E2E avec Docker | Qualité du code |

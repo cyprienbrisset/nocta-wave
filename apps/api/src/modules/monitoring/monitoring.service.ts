@@ -31,11 +31,18 @@ export class MonitoringService {
   // ============================================================================
 
   /**
-   * Get real-time metrics for a team
+   * Get real-time metrics for a team (with access check)
    */
   async getRealTimeMetrics(teamId: string, userId: string): Promise<RealTimeMetricsDto> {
     await this.teamService.checkTeamAccess(teamId, userId, ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']);
+    return this.getRealTimeMetricsInternal(teamId);
+  }
 
+  /**
+   * Internal method to get real-time metrics without access check
+   * Used by scheduled jobs that run in system context
+   */
+  private async getRealTimeMetricsInternal(teamId: string): Promise<RealTimeMetricsDto> {
     const now = new Date();
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
     const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
@@ -653,7 +660,7 @@ export class MonitoringService {
   // ============================================================================
 
   /**
-   * Check alert thresholds
+   * Check alert thresholds (used by scheduled jobs - no user context)
    */
   async checkAlertThresholds(teamId: string) {
     const alertRules = await this.prisma.alertRule.findMany({
@@ -661,7 +668,8 @@ export class MonitoringService {
       include: { channels: true },
     });
 
-    const metrics = await this.getRealTimeMetrics(teamId, '');
+    // Use internal method since this is called from a scheduled job without user context
+    const metrics = await this.getRealTimeMetricsInternal(teamId);
 
     for (const rule of alertRules) {
       const shouldFire = await this.evaluateAlertCondition(rule, metrics);
