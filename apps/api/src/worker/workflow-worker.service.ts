@@ -1,13 +1,14 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { RedisService } from '../database/redis.service';
 import { EncryptionService } from '../modules/credential/encryption.service';
 import { ExecutionLogStorageService } from '../modules/storage/execution-log-storage.service';
 import { RedactionService } from '../modules/security/redaction.service';
 import { getNode } from '@ws-flows/nodes';
-import { topologicalSort } from '@ws-flows/shared';
-import type { WorkflowGraph, NodeContext } from '@ws-flows/shared';
+import { topologicalSort, WorkflowNode } from '@ws-flows/shared';
+import type { WorkflowGraph, NodeContext, NodeDefinition, NodeInput, NodeOutputResult } from '@ws-flows/shared';
 
 // ============================================================================
 // INTERFACES
@@ -18,8 +19,8 @@ interface ExecutionJob {
   workflowId: string;
   teamId: string;
   graph: WorkflowGraph;
-  inputData?: Record<string, any>;
-  settings?: Record<string, any>;
+  inputData?: Record<string, unknown>;
+  settings?: Record<string, unknown>;
   priority?: number;
   parentExecutionId?: string; // For sub-workflows
   resumeFromCheckpoint?: string; // For checkpoint recovery
@@ -42,7 +43,7 @@ interface CircuitBreakerState {
 interface ExecutionCheckpoint {
   executionId: string;
   nodeId: string;
-  nodeOutputs: Record<string, any>;
+  nodeOutputs: Record<string, unknown>;
   executedNodes: string[];
   timestamp: number;
 }
@@ -68,7 +69,7 @@ interface WorkerStats {
 interface NodeExecutionResult {
   nodeId: string;
   success: boolean;
-  data?: any;
+  data?: unknown;
   outputHandle?: string;
   error?: string;
   duration: number;
@@ -505,12 +506,12 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
     executionId: string,
     workflowId: string,
     graph: WorkflowGraph,
-    nodeOutputs: Map<string, any>,
+    nodeOutputs: Map<string, NodeOutputResult>,
     executedNodes: Set<string>,
-    credentials: Map<string, any>,
-    workflowVariables: Record<string, any>,
-    inputData: Record<string, any>,
-    settings: Record<string, any> | undefined,
+    credentials: Map<string, Record<string, unknown>>,
+    workflowVariables: Record<string, unknown>,
+    inputData: Record<string, unknown>,
+    settings: Record<string, unknown> | undefined,
     abortController: AbortController,
   ) {
     const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
@@ -613,12 +614,12 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
     graph: WorkflowGraph,
     executionId: string,
     workflowId: string,
-    nodeOutputs: Map<string, any>,
+    nodeOutputs: Map<string, NodeOutputResult>,
     executedNodes: Set<string>,
-    credentials: Map<string, any>,
-    workflowVariables: Record<string, any>,
-    inputData: Record<string, any>,
-    settings: Record<string, any> | undefined,
+    credentials: Map<string, Record<string, unknown>>,
+    workflowVariables: Record<string, unknown>,
+    inputData: Record<string, unknown>,
+    settings: Record<string, unknown> | undefined,
     abortController: AbortController,
   ) {
     const executionOrder = topologicalSort(graph.nodes, graph.edges);
@@ -656,15 +657,15 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
   // ============================================================================
 
   private async executeNodeSafe(
-    node: any,
+    node: WorkflowNode,
     executionId: string,
     workflowId: string,
     graph: WorkflowGraph,
-    nodeOutputs: Map<string, any>,
-    credentials: Map<string, any>,
-    workflowVariables: Record<string, any>,
-    inputData: Record<string, any>,
-    settings: Record<string, any> | undefined,
+    nodeOutputs: Map<string, NodeOutputResult>,
+    credentials: Map<string, Record<string, unknown>>,
+    workflowVariables: Record<string, unknown>,
+    inputData: Record<string, unknown>,
+    settings: Record<string, unknown> | undefined,
     abortController: AbortController,
   ): Promise<NodeExecutionResult> {
     const startTime = Date.now();
@@ -704,16 +705,16 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async executeNode(
-    node: any,
+    node: WorkflowNode,
     executionId: string,
     workflowId: string,
     graph: WorkflowGraph,
-    nodeOutputs: Map<string, any>,
+    nodeOutputs: Map<string, NodeOutputResult>,
     executedNodes: Set<string>,
-    credentials: Map<string, any>,
-    workflowVariables: Record<string, any>,
-    inputData: Record<string, any>,
-    settings: Record<string, any> | undefined,
+    credentials: Map<string, Record<string, unknown>>,
+    workflowVariables: Record<string, unknown>,
+    inputData: Record<string, unknown>,
+    settings: Record<string, unknown> | undefined,
     abortController: AbortController,
   ) {
     const nodeType = node.data?.nodeType || node.type;
@@ -744,8 +745,8 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
         nodeType,
         nodeName: node.data?.label || node.id,
         status: 'RUNNING',
-        inputData: inputStorageResult.inputData as any,
-        inputDataRef: inputStorageResult.inputDataRef as any,
+        inputData: inputStorageResult.inputData as Prisma.InputJsonValue,
+        inputDataRef: inputStorageResult.inputDataRef as Prisma.InputJsonValue,
       },
     });
 
@@ -758,17 +759,25 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
     const nodeStartTime = Date.now();
     const nodeData = node.data || {};
 
+    // Handle retry config - can be boolean or object
+    const nodeRetry = typeof nodeData.retry === 'object' && nodeData.retry !== null
+      ? nodeData.retry
+      : {};
     const retryConfig: NodeRetryConfig = {
       ...DEFAULT_RETRY_CONFIG,
-      ...(nodeData.retry || {}),
+      ...(nodeRetry as Partial<NodeRetryConfig>),
     };
-    const timeoutMs = nodeData.timeout || DEFAULT_NODE_TIMEOUT_MS;
+    const timeoutMs = (nodeData.timeout as number | undefined) || DEFAULT_NODE_TIMEOUT_MS;
 
     try {
       // Apply rate limiting if configured
       const credentialId = nodeData.credentialId || nodeData.credentials?.[0];
+      const rateLimitConfig = nodeData.rateLimit as { maxRequests?: number; windowMs?: number } | undefined;
       if (credentialId) {
-        await this.waitForRateLimit(credentialId, nodeData.rateLimit);
+        await this.waitForRateLimit(
+          credentialId,
+          rateLimitConfig ? { requestsPerSecond: rateLimitConfig.maxRequests } : undefined
+        );
       }
 
       const previousData = this.gatherPreviousData(node.id, graph.edges, nodeOutputs);
@@ -792,7 +801,7 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
         nodeId: node.id,
       };
 
-      const result = await this.executeNodeWithRetry(
+      const rawResult = await this.executeNodeWithRetry(
         nodeDefinition,
         { config: resolvedConfig, data: previousData, credentials: nodeCredentials },
         context,
@@ -804,6 +813,8 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
 
       executedNodes.add(node.id);
 
+      // Type the result as NodeOutputResult
+      const result = rawResult as NodeOutputResult;
       const outputData = result.data as Record<string, unknown> | undefined;
 
       // Get the output handle from the result, node definition outputs, or default to 'output'
@@ -835,8 +846,8 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
         where: { id: executionLog.id },
         data: {
           status: 'COMPLETED',
-          outputData: outputStorageResult.outputData as any,
-          outputDataRef: outputStorageResult.outputDataRef as any,
+          outputData: outputStorageResult.outputData as Prisma.InputJsonValue,
+          outputDataRef: outputStorageResult.outputDataRef as Prisma.InputJsonValue,
           finishedAt: new Date(),
           duration: nodeDuration,
         },
@@ -881,8 +892,8 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
         await this.prisma.executionLog.update({
           where: { id: executionLog.id },
           data: {
-            outputData: subOutputStorage.outputData as any,
-            outputDataRef: subOutputStorage.outputDataRef as any,
+            outputData: subOutputStorage.outputData as Prisma.InputJsonValue,
+            outputDataRef: subOutputStorage.outputDataRef as Prisma.InputJsonValue,
           },
         });
       }
@@ -939,8 +950,8 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
           where: { id: executionLog.id },
           data: {
             status: 'COMPLETED',
-            outputData: errorOutputStorage.outputData as any,
-            outputDataRef: errorOutputStorage.outputDataRef as any,
+            outputData: errorOutputStorage.outputData as Prisma.InputJsonValue,
+            outputDataRef: errorOutputStorage.outputDataRef as Prisma.InputJsonValue,
             finishedAt: new Date(),
             duration: nodeDuration,
           },
@@ -977,14 +988,14 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async executeNodeWithRetry(
-    nodeDefinition: any,
-    input: { config: any; data: any; credentials?: any },
+    nodeDefinition: NodeDefinition,
+    input: NodeInput,
     context: NodeContext,
     retryConfig: NodeRetryConfig,
     timeoutMs: number,
     signal: AbortSignal,
     nodeType: string,
-  ): Promise<any> {
+  ): Promise<unknown> {
     let lastError: Error | null = null;
     let delay = retryConfig.initialDelayMs;
 
@@ -1167,15 +1178,15 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
   // HELPER METHODS
   // ============================================================================
 
-  private extractWorkflowVariables(graph: WorkflowGraph): Record<string, any> {
-    const workflowVariables: Record<string, any> = {};
+  private extractWorkflowVariables(graph: WorkflowGraph): Record<string, unknown> {
+    const workflowVariables: Record<string, unknown> = {};
     const graphWithVars = graph as WorkflowGraph & {
       variables?: Array<{ name: string; value: string; type: string }>;
     };
 
     if (graphWithVars.variables && Array.isArray(graphWithVars.variables)) {
       for (const variable of graphWithVars.variables) {
-        let value: any = variable.value;
+        let value: unknown = variable.value;
         if (variable.type === 'number') {
           value = Number(variable.value);
         } else if (variable.type === 'boolean') {
@@ -1194,7 +1205,7 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
     return workflowVariables;
   }
 
-  private collectCredentialIds(nodes: any[]): string[] {
+  private collectCredentialIds(nodes: WorkflowNode[]): string[] {
     const credentialIds = new Set<string>();
     for (const node of nodes) {
       const nodeData = node.data || {};
@@ -1217,7 +1228,7 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
   private shouldExecuteNode(
     nodeId: string,
     edges: WorkflowGraph['edges'],
-    nodeOutputs: Map<string, any>,
+    nodeOutputs: Map<string, NodeOutputResult>,
     executedNodes: Set<string>,
   ): boolean {
     const incomingEdges = edges.filter((e) => e.target === nodeId);
@@ -1256,10 +1267,10 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
   private gatherPreviousData(
     nodeId: string,
     edges: WorkflowGraph['edges'],
-    nodeOutputs: Map<string, any>,
-  ): Record<string, any> {
+    nodeOutputs: Map<string, NodeOutputResult>,
+  ): Record<string, unknown> {
     const incomingEdges = edges.filter((e) => e.target === nodeId);
-    const previousData: Record<string, any> = {};
+    const previousData: Record<string, unknown> = {};
 
     for (const edge of incomingEdges) {
       const sourceOutput = nodeOutputs.get(edge.source);
@@ -1277,19 +1288,19 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    return Object.values(previousData).reduce((acc, data) => {
-      if (typeof data === 'object' && data !== null) {
-        return { ...acc, ...data };
+    return Object.values(previousData).reduce<Record<string, unknown>>((acc, data) => {
+      if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+        return { ...acc, ...(data as Record<string, unknown>) };
       }
       return acc;
     }, {});
   }
 
   private resolveExpressions(
-    config: Record<string, any>,
-    context: Record<string, any>,
-  ): Record<string, any> {
-    const resolved: Record<string, any> = {};
+    config: Record<string, unknown>,
+    context: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const resolved: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(config)) {
       if (typeof value === 'string') {
@@ -1299,11 +1310,11 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
           typeof item === 'string'
             ? this.evaluateExpression(item, context)
             : typeof item === 'object' && item !== null
-              ? this.resolveExpressions(item, context)
+              ? this.resolveExpressions(item as Record<string, unknown>, context)
               : item,
         );
       } else if (typeof value === 'object' && value !== null) {
-        resolved[key] = this.resolveExpressions(value, context);
+        resolved[key] = this.resolveExpressions(value as Record<string, unknown>, context);
       } else {
         resolved[key] = value;
       }
@@ -1312,7 +1323,7 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
     return resolved;
   }
 
-  private evaluateExpression(template: string, context: Record<string, any>): any {
+  private evaluateExpression(template: string, context: Record<string, unknown>): unknown {
     const expressionRegex = /\{\{\s*(.+?)\s*\}\}/g;
 
     const fullMatch = template.match(/^\{\{\s*(.+?)\s*\}\}$/);
@@ -1356,7 +1367,7 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
   private async loadCredentials(
     teamId: string,
     credentialIds: string[],
-  ): Promise<Map<string, Record<string, any>>> {
+  ): Promise<Map<string, Record<string, unknown>>> {
     if (credentialIds.length === 0) {
       return new Map();
     }
@@ -1368,7 +1379,7 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    const result = new Map<string, Record<string, any>>();
+    const result = new Map<string, Record<string, unknown>>();
 
     for (const credential of credentials) {
       try {
@@ -1474,7 +1485,7 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
     resultData: Record<string, unknown>,
     parentExecutionId: string,
     parentWorkflowId: string,
-    parentSettings: Record<string, any> | undefined,
+    parentSettings: Record<string, unknown> | undefined,
     abortController: AbortController,
   ): Promise<Record<string, unknown>> {
     const subWorkflowId = resultData.subWorkflowId as string;
@@ -1517,12 +1528,14 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
     const graph = workflow.graph as unknown as WorkflowGraph;
 
     // Find the SubWorkflowInput node and set its data
+    // Using type assertion since nodeType is in extended node data
     const inputNode = graph.nodes.find(
-      (n) => (n as any).data?.nodeType === 'flow.subworkflow-input',
+      (n) => (n.data as Record<string, unknown>)?.nodeType === 'flow.subworkflow-input',
     );
     if (inputNode) {
-      (inputNode as any).data = {
-        ...(inputNode as any).data,
+      const nodeData = inputNode.data as Record<string, unknown>;
+      (inputNode as { data: Record<string, unknown> }).data = {
+        ...nodeData,
         __inputData: inputData,
       };
     }
@@ -1534,7 +1547,7 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
         triggeredBy: null,
         triggerType: 'SUBWORKFLOW',
         status: 'PENDING',
-        inputData: inputData as any,
+        inputData: inputData as Prisma.InputJsonValue,
         parentExecutionId,
       },
     });
@@ -1611,7 +1624,7 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
           executedNodes,
           credentials,
           workflowVariables,
-          inputData as Record<string, any>,
+          inputData as Record<string, unknown>,
           parentSettings,
           childAbortController,
         ),
@@ -1620,7 +1633,7 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
 
       // Find the SubWorkflowOutput node and get its data
       const outputNode = graph.nodes.find(
-        (n) => (n as any).data?.nodeType === 'flow.subworkflow-output',
+        (n) => (n.data as Record<string, unknown>)?.nodeType === 'flow.subworkflow-output',
       );
 
       let outputData: Record<string, unknown> = {};
@@ -1641,7 +1654,7 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
         where: { id: childExecution.id },
         data: {
           status: 'COMPLETED',
-          outputData: outputData as any,
+          outputData: outputData as Prisma.InputJsonValue,
           finishedAt: new Date(),
         },
       });
@@ -1677,7 +1690,7 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
   async triggerSubWorkflow(
     workflowId: string,
     parentExecutionId: string,
-    inputData: Record<string, any>,
+    inputData: Record<string, unknown>,
     teamId: string,
   ): Promise<string> {
     const workflow = await this.prisma.workflow.findUnique({
@@ -1694,7 +1707,7 @@ export class WorkflowWorkerService implements OnModuleInit, OnModuleDestroy {
         triggeredBy: null,
         triggerType: 'SUBWORKFLOW',
         status: 'PENDING',
-        inputData,
+        inputData: inputData as Prisma.InputJsonValue,
       },
     });
 

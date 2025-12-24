@@ -4,6 +4,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { RedisService } from '../../database/redis.service';
 import { TeamService } from '../team/team.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { LogLevel as PrismaLogLevel, SpanStatus } from '@prisma/client';
 import {
   MetricsQueryDto,
   RealTimeMetricsDto,
@@ -401,7 +402,7 @@ export class MonitoringService {
     const createdLog = await this.prisma.structuredLog.create({
       data: {
         teamId,
-        level: log.level as any,
+        level: log.level as PrismaLogLevel,
         message: log.message,
         context: log.context,
         workflowId: log.workflowId,
@@ -604,7 +605,7 @@ export class MonitoringService {
         startTime: new Date(span.startTime),
         endTime: span.endTime ? new Date(span.endTime) : undefined,
         duration: span.duration,
-        status: (span.status as any) || 'UNSET',
+        status: (span.status as SpanStatus) || 'UNSET',
         statusMessage: span.statusMessage,
         attributes: span.attributes,
         events: span.events,
@@ -649,7 +650,7 @@ export class MonitoringService {
       data: {
         endTime: data.endTime,
         duration: duration * 1000, // Convert to microseconds
-        status: (data.status as any) || 'OK',
+        status: (data.status as SpanStatus) || 'OK',
         statusMessage: data.statusMessage,
       },
     });

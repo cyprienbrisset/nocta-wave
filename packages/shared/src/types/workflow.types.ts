@@ -32,11 +32,30 @@ export interface NodePosition {
   y: number;
 }
 
+export interface NodeRetryConfig {
+  maxAttempts?: number;
+  initialDelayMs?: number;
+  maxDelayMs?: number;
+  backoffMultiplier?: number;
+}
+
 export interface NodeData {
   label: string;
   icon?: string;
   config: Record<string, unknown>;
   credentials?: string[]; // credential IDs
+  // Runtime properties
+  nodeType?: string;
+  credentialId?: string;
+  retry?: boolean | NodeRetryConfig;
+  timeout?: number;
+  rateLimit?: {
+    maxRequests: number;
+    windowMs: number;
+  };
+  continueOnError?: boolean;
+  // Allow additional properties for extensibility
+  [key: string]: unknown;
 }
 
 export interface WorkflowEdge {
@@ -93,4 +112,99 @@ export interface WorkflowSummary {
   updatedAt: Date;
   lastExecutionAt?: Date;
   executionCount?: number;
+}
+
+// ============================================================================
+// NODE OUTPUT TYPES
+// ============================================================================
+
+/**
+ * Result of executing a node, stored in nodeOutputs Map
+ */
+export interface NodeOutputResult {
+  data?: unknown;
+  outputHandle?: string;
+  __rawOutput?: unknown;
+  [key: string]: unknown;
+}
+
+// ============================================================================
+// VERSION DIFF TYPES
+// ============================================================================
+
+export interface WorkflowVersionDiff {
+  nodes: {
+    added: WorkflowNode[];
+    removed: WorkflowNode[];
+    modified: NodeModification[];
+  };
+  edges: {
+    added: WorkflowEdge[];
+    removed: WorkflowEdge[];
+  };
+  settings: {
+    current: WorkflowSettings | null;
+    previous: WorkflowSettings | null;
+  };
+}
+
+export interface NodeModification {
+  id: string;
+  field: string;
+  before: unknown;
+  after: unknown;
+}
+
+// ============================================================================
+// WORKFLOW WITH TYPED PRISMA FIELDS
+// ============================================================================
+
+/**
+ * Extended WorkflowGraph with viewport for React Flow
+ */
+export interface WorkflowGraphWithViewport extends WorkflowGraph {
+  viewport?: {
+    x: number;
+    y: number;
+    zoom: number;
+  };
+}
+
+/**
+ * Type guard to check if a value is a valid WorkflowGraph
+ */
+export function isWorkflowGraph(value: unknown): value is WorkflowGraph {
+  if (!value || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  return Array.isArray(obj.nodes) && Array.isArray(obj.edges);
+}
+
+/**
+ * Type guard to check if a value is valid WorkflowSettings
+ */
+export function isWorkflowSettings(value: unknown): value is WorkflowSettings {
+  if (!value || typeof value !== 'object') return false;
+  return true; // All fields are optional
+}
+
+/**
+ * Safely cast Prisma Json to WorkflowGraph
+ */
+export function toWorkflowGraph(json: unknown): WorkflowGraph {
+  if (isWorkflowGraph(json)) {
+    return json;
+  }
+  // Return empty graph as fallback
+  return { nodes: [], edges: [] };
+}
+
+/**
+ * Safely cast Prisma Json to WorkflowSettings
+ */
+export function toWorkflowSettings(json: unknown): WorkflowSettings | null {
+  if (!json) return null;
+  if (isWorkflowSettings(json)) {
+    return json;
+  }
+  return null;
 }

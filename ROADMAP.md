@@ -1,63 +1,276 @@
-# Nocta Wave - Roadmap
+# Nocta Wave - Roadmap & Analyse
 
-Ce document décrit les améliorations et fonctionnalités planifiées pour Nocta Wave.
-
----
-
-## Statut des Améliorations Techniques
-
-### Complété
-
-| Item | Description | Status |
-|------|-------------|--------|
-| **Stockage externe logs** | Logs volumineux externalisés vers S3/MinIO | ✅ Fait |
-| **Cache Redis** | NodeResultCache migré vers Redis | ✅ Fait |
-| **Données éphémères Redis** | Curseurs, viewports stockés uniquement en Redis | ✅ Fait |
-| **Masquage des secrets** | RedactionService pour masquer les données sensibles | ✅ Fait |
-| **Permissions WebSocket** | Vérification stricte VIEW/COMMENT/EDIT | ✅ Fait |
-| **Segmentation Control/Data Plane** | Documentation et séparation logique | ✅ Fait |
-| **Dépendances stables** | Next.js 15, React 18 LTS | ✅ Fait |
-| **Tests E2E** | Infrastructure complète avec Docker | ✅ Fait |
-| **Sécurité DLQ** | Vérification d'accès team sur toutes les opérations | ✅ Fait |
+Ce document contient l'analyse complète du projet, les corrections à apporter, et les fonctionnalités planifiées.
 
 ---
 
-## Phase 1 : Fonctionnalités Core (Court terme)
+## Corrections Critiques (Priorité Immédiate)
 
-### 1.1 Sub-workflows Réutilisables
+### 1. Vulnérabilité RCE - Évaluation d'Expressions
 
-**Objectif :** Permettre d'encapsuler des workflows comme des "fonctions" réutilisables.
+**Fichier** : `apps/api/src/worker/workflow-worker.service.ts` (Lignes 1321, 1330)
 
-- [ ] Créer un type de node `subworkflow.call`
-- [ ] Interface pour mapper les inputs/outputs du sub-workflow
+**Problème** : Utilisation de `new Function()` pour évaluer des expressions utilisateur, permettant l'injection de code arbitraire.
+
+```typescript
+// DANGEREUX - permet l'exécution de code arbitraire
+const fn = new Function(...Object.keys(context), `return ${expr}`);
+```
+
+**Solution** :
+- [ ] Remplacer par une bibliothèque sécurisée (`expr-eval`, `jexl`, ou VM sandboxée)
+- [ ] Ajouter une validation des expressions avant exécution
+- [ ] Limiter les fonctions/objets accessibles dans le contexte
+
+---
+
+### 2. Misconfiguration CORS avec Credentials
+
+**Fichiers** :
+- `apps/api/src/main.ts` (Ligne 12)
+- `apps/api/src/modules/execution/execution.gateway.ts` (Lignes 15-16)
+- `apps/api/src/modules/collaboration/realtime/realtime.gateway.ts` (Lignes 42-43)
+- `apps/api/src/modules/monitoring/monitoring.gateway.ts` (Ligne 17)
+
+**Problème** : `origin: '*'` combiné avec `credentials: true` viole la sécurité CORS.
+
+**Solution** :
+- [ ] Configurer une liste d'origines autorisées via variable d'environnement
+- [ ] Supprimer `credentials: true` si wildcard nécessaire
+- [ ] Ajouter validation côté serveur des origines
+
+---
+
+### 3. Vérification de Signature Webhook Optionnelle
+
+**Fichier** : `apps/api/src/modules/webhook/webhook.service.ts` (Lignes 188-198)
+
+**Problème** : La vérification de signature est ignorée si le header `x-webhook-signature` est absent.
+
+**Solution** :
+- [ ] Rendre la vérification obligatoire quand un secret existe
+- [ ] Retourner 401 si le header est manquant
+- [ ] Ajouter rate limiting sur les endpoints webhook
+
+---
+
+## Corrections Haute Priorité
+
+### 4. Typage TypeScript Faible
+
+**Problème** : 50+ utilisations de `as any` à travers le codebase.
+
+**Fichiers principaux** :
+- `apps/api/src/modules/workflow/workflow.service.ts`
+- `apps/api/src/worker/workflow-worker.service.ts`
+- `apps/api/src/modules/monitoring/monitoring.service.ts`
+- `apps/api/src/modules/subworkflow/subworkflow.service.ts`
+
+**Solution** :
+- [ ] Créer des interfaces TypeScript pour `WorkflowGraph`, `WorkflowSettings`
+- [ ] Remplacer tous les `as any` par des types appropriés
+- [ ] Activer `strict: true` dans tsconfig.json
+
+---
+
+### 5. Validation des Entrées Manquante
+
+**Fichier** : `apps/api/src/modules/execution/execution.service.ts` (Lignes 27-68)
+
+**Problème** : La méthode `trigger()` ne valide pas `inputData` avant mise en queue.
+
+**Solution** :
+- [ ] Ajouter validation Zod pour les données d'entrée
+- [ ] Limiter la taille maximale des payloads
+- [ ] Valider la structure du graphe avant exécution
+
+---
+
+### 6. Gestion d'Erreur Silencieuse
+
+**Fichier** : `apps/api/src/modules/workflow/workflow.service.ts` (Lignes 49-59)
+
+**Problème** : L'échec de création de branche est loggé mais ignoré.
+
+```typescript
+try {
+  await this.branchService.createMainBranch(...);
+} catch (error) {
+  console.error('Failed to create main branch:', error); // Échec silencieux!
+}
+```
+
+**Solution** :
+- [ ] Faire échouer la création de workflow si la branche échoue
+- [ ] Ou implémenter un mécanisme de retry
+
+---
+
+## Corrections Priorité Moyenne
+
+### 7. Logging Console en Production
+
+**Problème** : Utilisation de `console.log/error` au lieu du Logger NestJS.
+
+**Fichiers** :
+- `apps/api/src/main.ts`
+- `apps/api/src/database/redis.service.ts`
+- `apps/api/src/modules/execution/execution.gateway.ts`
+- `apps/api/src/modules/workflow/workflow.service.ts`
+
+**Solution** :
+- [ ] Remplacer tous les `console.*` par `this.logger.*`
+- [ ] Configurer des niveaux de log par environnement
+
+---
+
+### 8. Problème de Performance N+1
+
+**Fichier** : `apps/api/src/modules/collaboration/realtime/realtime.service.ts` (Lignes 391-403)
+
+**Problème** : `getWorkflowCursors()` fait une requête par collaborateur.
+
+**Solution** :
+- [ ] Utiliser `mget()` pour récupérer tous les curseurs en une seule opération
+- [ ] Implémenter un cache local pour les données fréquemment accédées
+
+---
+
+### 9. Commande Redis KEYS en Production
+
+**Fichier** : `apps/api/src/modules/collaboration/realtime/realtime.service.ts` (Ligne 301)
+
+**Problème** : `keys()` bloque Redis pour les grands ensembles de clés.
+
+**Solution** :
+- [ ] Remplacer par `SCAN` avec curseur
+- [ ] Ou maintenir un index des clés actives
+
+---
+
+### 10. Validation de Clé de Chiffrement
+
+**Fichier** : `apps/api/src/modules/credential/encryption.service.ts` (Lignes 14-18)
+
+**Problème** : Pas de validation de la longueur/format de la clé.
+
+**Solution** :
+- [ ] Valider que la clé fait exactement 32 bytes (256-bit)
+- [ ] Vérifier le format hexadécimal
+
+---
+
+### 11. Audit Logging Manquant
+
+**Problème** : Pas de logs d'audit pour les opérations sensibles.
+
+**Opérations à tracer** :
+- [ ] Création/suppression de credentials
+- [ ] Changements de rôles dans les équipes
+- [ ] Activation/désactivation de workflows
+- [ ] Création/régénération de secrets webhook
+
+---
+
+## Améliorations de Sécurité
+
+### 12. Rate Limiting
+
+**Problème** : Pas de limitation de débit sur les endpoints critiques.
+
+**Solution** :
+- [ ] Implémenter `@nestjs/throttler` sur :
+  - Endpoints d'authentification
+  - Triggers webhook
+  - API d'exécution
+  - Messages WebSocket
+
+---
+
+### 13. Protection CSRF
+
+**Problème** : Pas de tokens CSRF sur les opérations modifiantes.
+
+**Solution** :
+- [ ] Ajouter protection CSRF avec `csurf` ou similaire
+- [ ] Configurer les headers Content Security Policy
+
+---
+
+### 14. Validation de Mot de Passe Faible
+
+**Fichier** : `apps/api/src/modules/auth/dto/auth.dto.ts` (Ligne 20)
+
+**Problème** : Le pattern regex permet des mots de passe faibles.
+
+**Solution** :
+- [ ] Utiliser une bibliothèque d'évaluation de force (`zxcvbn`)
+- [ ] Exiger une entropie minimale
+
+---
+
+## Améliorations de Performance
+
+### 15. Pagination Cursor-Based
+
+**Fichiers** :
+- `apps/api/src/modules/workflow/workflow.service.ts`
+- `apps/api/src/modules/execution/execution.service.ts`
+
+**Problème** : `skip` + `take` avec `count()` = 2 scans de table complets.
+
+**Solution** :
+- [ ] Implémenter une pagination basée sur curseur
+- [ ] Utiliser `id` comme curseur pour les listes
+
+---
+
+### 16. Index Base de Données Manquants
+
+**Indexes à ajouter** :
+- [ ] `execution(workflowId, status)` - composite
+- [ ] `execution(createdAt)` - pour les requêtes temporelles
+- [ ] `workflow(teamId, isActive)` - composite
+- [ ] `structuredLog(timestamp)` - pour les requêtes de monitoring
+
+---
+
+### 17. Circuit Breaker pour Services Externes
+
+**Problème** : Pas de protection contre les cascades d'échecs.
+
+**Solution** :
+- [ ] Implémenter circuit breaker pour tous les appels API externes
+- [ ] Étendre le circuit breaker existant dans WorkflowWorkerService
+
+---
+
+## Nouvelles Fonctionnalités
+
+### Phase 1 : Fonctionnalités Core
+
+#### 1.1 Sub-workflows Réutilisables
+- [ ] Node `subworkflow.call` pour encapsuler des workflows
+- [ ] Interface de mapping inputs/outputs
 - [ ] Gestion de la récursion (limite de profondeur)
 - [ ] Visualisation des sub-workflows imbriqués
-- [ ] Versioning des sub-workflows (quelle version utiliser)
+- [ ] Versioning des sub-workflows
 
-### 1.2 Variables et Environnements
-
-**Objectif :** Supporter plusieurs environnements (dev, staging, prod) avec des variables différentes.
-
+#### 1.2 Variables et Environnements
 - [ ] Modèle `EnvironmentVariable` avec valeurs par environnement
 - [ ] Interface de promotion entre environnements
-- [ ] Secrets par environnement (credentials différents)
-- [ ] Indicateur visuel de l'environnement actif dans l'éditeur
+- [ ] Secrets par environnement
+- [ ] Indicateur visuel de l'environnement actif
 - [ ] Logs séparés par environnement
 
-### 1.3 Mode Debug Avancé
-
-**Objectif :** Améliorer le debugging des workflows.
-
+#### 1.3 Mode Debug Avancé
 - [ ] Points d'arrêt (breakpoints) sur les nodes
 - [ ] Exécution pas-à-pas
 - [ ] Inspection des données à chaque étape
-- [ ] Modification des données en cours d'exécution (hot reload)
+- [ ] Modification des données en cours d'exécution
 - [ ] Replay d'une exécution avec données modifiées
 
-### 1.4 Versioning Git-like des Workflows
-
-**Objectif :** Historique complet avec branches et merges.
-
+#### 1.4 Versioning Git-like
 - [ ] Branches de développement pour les workflows
 - [ ] Diff visuel entre versions
 - [ ] Merge de branches avec résolution de conflits
@@ -66,322 +279,156 @@ Ce document décrit les améliorations et fonctionnalités planifiées pour Noct
 
 ---
 
-## Phase 2 : Intégrations et Connecteurs (Moyen terme)
+### Phase 2 : Intégrations
 
-### 2.1 Nouveaux Nodes d'Intégration
+#### 2.1 Nouveaux Nodes
+**CRM** :
+- [ ] Salesforce
+- [ ] HubSpot
+- [ ] Pipedrive
 
-**APIs populaires à intégrer :**
+**Project Management** :
+- [ ] Jira
+- [ ] Linear
+- [ ] Asana
 
-- [ ] **CRM** : Salesforce, HubSpot, Pipedrive
-- [ ] **Project Management** : Jira, Linear, Asana, Monday
-- [ ] **Communication** : Microsoft Teams, Telegram
-- [ ] **E-commerce** : Shopify, WooCommerce, Magento
-- [ ] **Marketing** : Mailchimp, ActiveCampaign, Brevo
-- [ ] **Analytics** : Google Analytics, Mixpanel, Amplitude
-- [ ] **AI/ML** : Anthropic Claude, Gemini, Replicate, Hugging Face
-- [ ] **Storage** : Google Drive, Dropbox, OneDrive
-- [ ] **Databases** : Supabase, Firebase, DynamoDB
+**Communication** :
+- [ ] Microsoft Teams
+- [ ] Telegram
 
-### 2.2 OAuth 2.0 Avancé
+**E-commerce** :
+- [ ] Shopify
+- [ ] WooCommerce
 
-**Objectif :** Gestion robuste des tokens OAuth.
+**AI/ML** :
+- [ ] Anthropic Claude
+- [ ] Gemini
+- [ ] Replicate
 
+#### 2.2 OAuth 2.0 Avancé
 - [ ] Refresh automatique des tokens expirés
-- [ ] Support PKCE pour les flows publics
+- [ ] Support PKCE
 - [ ] Gestion multi-compte par intégration
-- [ ] Interface de reconnexion en cas d'expiration
 - [ ] Logs d'audit des accès OAuth
 
-### 2.3 Webhooks Avancés
-
-**Objectif :** Améliorer la robustesse des webhooks entrants.
-
+#### 2.3 Webhooks Avancés
 - [ ] Validation de signature (HMAC, JWT)
-- [ ] Retry avec backoff exponentiel pour webhooks sortants
-- [ ] Queue de webhooks entrants pour absorber les pics
+- [ ] Retry avec backoff exponentiel
+- [ ] Queue de webhooks entrants
 - [ ] Transformation des payloads à la réception
-- [ ] Webhooks conditionnels (filtrage avant exécution)
 
 ---
 
-## Phase 3 : Collaboration et UX (Moyen terme)
+### Phase 3 : Collaboration et UX
 
-### 3.1 Templates Marketplace
-
-**Objectif :** Bibliothèque de workflows prêts à l'emploi.
-
+#### 3.1 Templates Marketplace
 - [ ] Galerie de templates par catégorie
 - [ ] Import en un clic avec personnalisation
 - [ ] Partage de templates entre équipes
-- [ ] Rating et commentaires sur les templates
-- [ ] Templates officiels et communautaires
+- [ ] Rating et commentaires
 
-### 3.2 Collaboration Avancée
-
-**Objectif :** Améliorer le travail en équipe.
-
+#### 3.2 Collaboration Avancée
 - [ ] Mentions @utilisateur dans les commentaires
 - [ ] Notifications en temps réel (in-app + email)
 - [ ] Historique d'activité par workflow
-- [ ] Mode "Suggestion" (proposer des changements sans modifier)
-- [ ] Approbations de modifications (workflow review)
+- [ ] Mode "Suggestion" (proposer sans modifier)
+- [ ] Approbations de modifications
 
-### 3.3 UX de l'Éditeur
-
-**Objectif :** Rendre l'éditeur plus productif.
-
+#### 3.3 UX de l'Éditeur
 - [ ] Raccourcis clavier personnalisables
-- [ ] Commande palette (Ctrl+K) pour actions rapides
+- [ ] Commande palette (Ctrl+K)
 - [ ] Recherche globale dans les workflows
 - [ ] Favoris et workflows récents
-- [ ] Mode sombre/clair avec thèmes personnalisés
-- [ ] Zoom automatique sur le node sélectionné
-- [ ] Snap-to-grid amélioré
+- [ ] Mode sombre/clair avec thèmes
 - [ ] Groupes de nodes pliables
-
-### 3.4 Mobile-friendly
-
-**Objectif :** Permettre la consultation sur mobile.
-
-- [ ] Vue read-only optimisée mobile
-- [ ] Monitoring des exécutions sur mobile
-- [ ] Notifications push
-- [ ] Actions rapides (pause/resume workflow)
 
 ---
 
-## Phase 4 : Performance et Scale (Long terme)
+### Phase 4 : Performance et Scale
 
-### 4.1 Exécution Distribuée
-
-**Objectif :** Supporter des volumes importants.
-
+#### 4.1 Exécution Distribuée
 - [ ] Workers horizontalement scalables
-- [ ] Partitionnement des queues par priorité/type
-- [ ] Affinité de workflow (même worker pour un workflow)
-- [ ] Execution pooling pour les workflows fréquents
+- [ ] Partitionnement des queues par priorité
+- [ ] Affinité de workflow
 - [ ] Warm start des workers
 
-### 4.2 Optimisations Base de Données
-
-**Objectif :** Maintenir les performances à grande échelle.
-
-- [ ] Partitionnement des tables `Execution` et `ExecutionLog` par date
+#### 4.2 Optimisations Base de Données
+- [ ] Partitionnement des tables par date
 - [ ] Archivage automatique vers stockage froid
-- [ ] Index optimisés pour les requêtes courantes
 - [ ] Read replicas pour les dashboards
 - [ ] Connection pooling avec PgBouncer
 
-### 4.3 Caching Intelligent
-
-**Objectif :** Réduire les calculs redondants.
-
+#### 4.3 Caching Intelligent
 - [ ] Cache de résultats de nodes idempotents
-- [ ] Invalidation intelligente du cache
+- [ ] Invalidation intelligente
 - [ ] Cache distribué multi-instance
-- [ ] Préchargement des workflows fréquents
-
-### 4.4 Rate Limiting et Quotas
-
-**Objectif :** Protéger le système et permettre la multi-tenancy.
-
-- [ ] Quotas par équipe (exécutions/jour, nodes/workflow)
-- [ ] Rate limiting par endpoint API
-- [ ] Throttling des webhooks entrants
-- [ ] Alertes de dépassement de quotas
-- [ ] Dashboard d'utilisation
 
 ---
 
-## Phase 5 : Observabilité et DevOps (Continue)
+### Phase 5 : Observabilité
 
-### 5.1 Monitoring et Métriques
-
-**Objectif :** Visibilité complète sur le système.
-
+#### 5.1 Monitoring et Métriques
 - [ ] Export Prometheus des métriques
 - [ ] Dashboards Grafana préconfigurés
-- [ ] Métriques business (exécutions, durées, erreurs)
-- [ ] Métriques infrastructure (CPU, mémoire, queues)
+- [ ] Métriques business et infrastructure
 - [ ] Alerting configurable (Slack, email, webhook)
 
-### 5.2 Tracing Distribué
-
-**Objectif :** Comprendre les problèmes de performance.
-
+#### 5.2 Tracing Distribué
 - [ ] OpenTelemetry integration
 - [ ] Trace ID propagé dans tout le système
-- [ ] Visualisation des traces dans Jaeger/Zipkin
-- [ ] Corrélation logs/traces/métriques
+- [ ] Visualisation des traces
 
-### 5.3 Logging Structuré
-
-**Objectif :** Logs exploitables en production.
-
-- [ ] Format JSON structuré
-- [ ] Niveaux de log configurables par module
-- [ ] Export vers ElasticSearch/Loki
-- [ ] Recherche et filtrage avancé
-- [ ] Rétention configurable
-
-### 5.4 Health Checks Avancés
-
-**Objectif :** Déploiements fiables.
-
+#### 5.3 Health Checks Avancés
 - [ ] `/health/live` - Liveness probe
 - [ ] `/health/ready` - Readiness probe
 - [ ] `/health/startup` - Startup probe
-- [ ] Vérification des dépendances (DB, Redis, S3)
+- [ ] Vérification des dépendances
 - [ ] Graceful shutdown
 
 ---
 
-## Phase 6 : Enterprise Features (Long terme)
+### Phase 6 : Enterprise
 
-### 6.1 Single Sign-On (SSO)
-
-**Objectif :** Intégration avec les systèmes d'identité entreprise.
-
+#### 6.1 Single Sign-On (SSO)
 - [ ] SAML 2.0 support
 - [ ] OIDC/OAuth enterprise providers
 - [ ] SCIM provisioning automatique
-- [ ] Directory sync (Azure AD, Okta, Google Workspace)
+- [ ] Directory sync (Azure AD, Okta)
 - [ ] MFA enforcement
 
-### 6.2 Audit et Compliance
-
-**Objectif :** Répondre aux exigences de conformité.
-
+#### 6.2 Audit et Compliance
 - [ ] Audit logs complets et immuables
 - [ ] Export des logs pour SIEM
 - [ ] Rapports de conformité automatisés
 - [ ] Data retention policies
-- [ ] GDPR : export et suppression des données utilisateur
+- [ ] GDPR : export et suppression des données
 
-### 6.3 Multi-région
-
-**Objectif :** Déploiement géographiquement distribué.
-
+#### 6.3 Multi-région
 - [ ] Données localisées par région
 - [ ] Exécution dans la région du workflow
-- [ ] Failover automatique entre régions
-- [ ] Latence optimisée
-
-### 6.4 API GraphQL
-
-**Objectif :** Alternative moderne à REST.
-
-- [ ] Schema GraphQL complet
-- [ ] Subscriptions pour le temps réel
-- [ ] Playground intégré
-- [ ] Documentation auto-générée
+- [ ] Failover automatique
 
 ---
 
-## Phase 7 : Écosystème et Extensions (Vision)
+## Résumé des Priorités
 
-### 7.1 Plugin System
-
-**Objectif :** Permettre l'extension par des tiers.
-
-- [ ] SDK pour créer des nodes custom
-- [ ] Marketplace de plugins
-- [ ] Sandboxing sécurisé des plugins
-- [ ] Versioning des plugins
-- [ ] Auto-update des plugins
-
-### 7.2 API Publique
-
-**Objectif :** Permettre l'intégration programmatique.
-
-- [ ] API REST documentée et versionnée
-- [ ] SDK clients (TypeScript, Python, Go)
-- [ ] Webhooks sortants configurables
-- [ ] Rate limiting et quotas API
-- [ ] API keys avec scopes
-
-### 7.3 CLI Tool
-
-**Objectif :** Gestion en ligne de commande.
-
-- [ ] `nocta-wave deploy` - Déployer un workflow
-- [ ] `nocta-wave run` - Exécuter manuellement
-- [ ] `nocta-wave logs` - Voir les logs en temps réel
-- [ ] `nocta-wave export/import` - Backup/restore
-- [ ] Intégration CI/CD
-
-### 7.4 Testing Framework
-
-**Objectif :** Tests automatisés des workflows.
-
-- [ ] Mode test avec mocks
-- [ ] Assertions sur les outputs
-- [ ] Tests de régression automatiques
-- [ ] Coverage des branches conditionnelles
-- [ ] Intégration avec CI/CD
+| Priorité | Nombre | Description |
+|----------|--------|-------------|
+| **CRITIQUE** | 3 | RCE, CORS, Webhook auth |
+| **HAUTE** | 3 | Typage, Validation, Gestion d'erreur |
+| **MOYENNE** | 8 | Logging, Performance, Sécurité |
+| **BASSE** | 10+ | Fonctionnalités manquantes |
 
 ---
 
-## Idées Futures (Backlog)
+## Actions Immédiates Recommandées
 
-### Intelligence Artificielle
-- [ ] Génération de workflows par description en langage naturel
-- [ ] Suggestions de nodes basées sur le contexte
-- [ ] Détection d'anomalies dans les exécutions
-- [ ] Auto-correction des erreurs courantes
-- [ ] Chatbot assistant intégré
-
-### Low-Code/No-Code Avancé
-- [ ] Formulaires dynamiques pour les inputs
-- [ ] Dashboards personnalisables
-- [ ] Rapports automatisés
-- [ ] Intégration avec des apps no-code (Retool, Appsmith)
-
-### Scheduling Avancé
-- [ ] Calendrier visuel des exécutions planifiées
-- [ ] Dépendances entre workflows
-- [ ] Fenêtres de maintenance
-- [ ] Timezone-aware scheduling
-
-### Sécurité Avancée
-- [ ] Secrets manager intégré (Vault-like)
-- [ ] Rotation automatique des credentials
-- [ ] IP whitelisting par workflow
-- [ ] Encryption at rest configurable
-
-### Performance
-- [ ] Compilation JIT des workflows fréquents
-- [ ] Edge execution (workers proches des sources)
-- [ ] Streaming de données volumineuses
-- [ ] Compression des payloads
-
----
-
-## Priorités de Développement
-
-| Phase | Focus | Horizon |
-|-------|-------|---------|
-| **Phase 1** | Sub-workflows, Environnements, Debug | Q1 2025 |
-| **Phase 2** | Intégrations, OAuth, Webhooks | Q2 2025 |
-| **Phase 3** | Templates, Collaboration, UX | Q2-Q3 2025 |
-| **Phase 4** | Scale, Performance | Q3 2025 |
-| **Phase 5** | Observabilité | Continue |
-| **Phase 6** | Enterprise | Q4 2025+ |
-| **Phase 7** | Écosystème | 2026+ |
-
----
-
-## Contribuer
-
-Vous souhaitez contribuer à l'une de ces fonctionnalités ?
-
-1. **Discuter** : Ouvrez une issue pour discuter de l'approche
-2. **Proposer** : Créez une RFC (Request For Comments) pour les changements majeurs
-3. **Développer** : Créez une branche depuis `main`
-4. **Tester** : Incluez des tests E2E pour les nouvelles fonctionnalités
-5. **Documenter** : Mettez à jour la documentation
-
-Consultez [CLAUDE.md](./CLAUDE.md) pour les conventions de développement.
+1. **Corriger la vulnérabilité RCE** - Remplacer `Function()` par un évaluateur sécurisé
+2. **Corriger la configuration CORS** - Supprimer `credentials: true` avec `origin: '*'`
+3. **Ajouter rate limiting** - Protéger les endpoints critiques
+4. **Remplacer `as any`** - Améliorer la sécurité de type
+5. **Ajouter des tests** - Augmenter la couverture des chemins critiques
+6. **Implémenter l'audit logging** - Tracer les opérations sensibles
 
 ---
 

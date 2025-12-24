@@ -4,19 +4,39 @@ import {
   ForbiddenException,
   Inject,
   forwardRef,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { TeamService } from '../team/team.service';
 import { BranchService } from '../branch/branch.service';
-import { WorkflowStatus } from '@prisma/client';
+import { Prisma, WorkflowStatus } from '@prisma/client';
 import {
   CreateWorkflowDto,
   UpdateWorkflowDto,
   WorkflowQueryDto,
 } from './dto/workflow.dto';
+import {
+  WorkflowGraph,
+  WorkflowSettings,
+  WorkflowNode,
+  WorkflowEdge,
+  toWorkflowGraph,
+  toWorkflowSettings,
+  NodeModification,
+} from '@ws-flows/shared';
+
+/**
+ * Version diff modification type - exported for controller return type
+ */
+export interface VersionDiffNodeModification {
+  current: WorkflowNode;
+  previous: WorkflowNode;
+}
 
 @Injectable()
 export class WorkflowService {
+  private readonly logger = new Logger(WorkflowService.name);
+
   constructor(
     private prisma: PrismaService,
     private teamService: TeamService,
@@ -55,7 +75,7 @@ export class WorkflowService {
       );
     } catch (error) {
       // If branch creation fails, don't fail the workflow creation
-      console.error('Failed to create main branch:', error);
+      this.logger.error('Failed to create main branch:', error);
     }
 
     return workflow;
@@ -109,7 +129,7 @@ export class WorkflowService {
       'VIEWER',
     ]);
 
-    const where: any = { teamId };
+    const where: Prisma.WorkflowWhereInput = { teamId };
 
     if (query.status) {
       where.status = query.status;
@@ -168,8 +188,8 @@ export class WorkflowService {
         data: {
           workflowId: id,
           version: workflow.version,
-          graph: workflow.graph as any,
-          settings: workflow.settings as any,
+          graph: workflow.graph as Prisma.InputJsonValue,
+          settings: workflow.settings as Prisma.InputJsonValue,
           changelog: dto.changelog,
         },
       });
@@ -219,8 +239,8 @@ export class WorkflowService {
         description: workflow.description,
         teamId: workflow.teamId,
         createdById: userId,
-        graph: workflow.graph as any,
-        settings: workflow.settings as any,
+        graph: workflow.graph as Prisma.InputJsonValue,
+        settings: workflow.settings as Prisma.InputJsonValue,
         status: 'DRAFT',
       },
     });
@@ -298,8 +318,8 @@ export class WorkflowService {
       data: {
         workflowId: id,
         version: workflow.version,
-        graph: workflow.graph as any,
-        settings: workflow.settings as any,
+        graph: workflow.graph as Prisma.InputJsonValue,
+        settings: workflow.settings as Prisma.InputJsonValue,
         changelog: 'Auto-saved before restore',
       },
     });
@@ -308,8 +328,8 @@ export class WorkflowService {
     return this.prisma.workflow.update({
       where: { id },
       data: {
-        graph: version.graph as any,
-        settings: version.settings as any,
+        graph: version.graph as Prisma.InputJsonValue,
+        settings: version.settings as Prisma.InputJsonValue,
         version: { increment: 1 },
       },
     });
@@ -384,71 +404,87 @@ export class WorkflowService {
       throw new NotFoundException('Version not found');
     }
 
-    const currentGraph = workflow.graph as any;
-    const versionGraph = version.graph as any;
+    const currentGraph = toWorkflowGraph(workflow.graph);
+    const versionGraph = toWorkflowGraph(version.graph);
 
-    // Calculate diff
-    const diff = {
+    // Calculate diff with proper types
+    const diff: {
+      version: number;
+      currentVersion: number;
+      changelog: string | null;
+      createdAt: Date;
+      changes: {
+        nodes: {
+          added: WorkflowNode[];
+          removed: WorkflowNode[];
+          modified: VersionDiffNodeModification[];
+        };
+        edges: {
+          added: WorkflowEdge[];
+          removed: WorkflowEdge[];
+        };
+      };
+    } = {
       version: version.version,
       currentVersion: workflow.version,
       changelog: version.changelog,
       createdAt: version.createdAt,
       changes: {
         nodes: {
-          added: [] as any[],
-          removed: [] as any[],
-          modified: [] as any[],
+          added: [],
+          removed: [],
+          modified: [],
         },
         edges: {
-          added: [] as any[],
-          removed: [] as any[],
+          added: [],
+          removed: [],
         },
       },
     };
 
     // Find node changes
-    const currentNodeIds = new Set(currentGraph.nodes?.map((n: any) => n.id) || []);
-    const versionNodeIds = new Set(versionGraph.nodes?.map((n: any) => n.id) || []);
+    const currentNodeIds = new Set(currentGraph.nodes.map((n) => n.id));
+    const versionNodeIds = new Set(versionGraph.nodes.map((n) => n.id));
 
     // Added nodes (in current but not in version)
-    diff.changes.nodes.added = (currentGraph.nodes || []).filter(
-      (n: any) => !versionNodeIds.has(n.id),
+    diff.changes.nodes.added = currentGraph.nodes.filter(
+      (n) => !versionNodeIds.has(n.id),
     );
 
     // Removed nodes (in version but not in current)
-    diff.changes.nodes.removed = (versionGraph.nodes || []).filter(
-      (n: any) => !currentNodeIds.has(n.id),
+    diff.changes.nodes.removed = versionGraph.nodes.filter(
+      (n) => !currentNodeIds.has(n.id),
     );
 
     // Modified nodes
-    const versionNodesMap = new Map(
-      (versionGraph.nodes || []).map((n: any) => [n.id, n]),
+    const versionNodesMap = new Map<string, WorkflowNode>(
+      versionGraph.nodes.map((n) => [n.id, n]),
     );
-    diff.changes.nodes.modified = (currentGraph.nodes || [])
-      .filter((n: any) => {
+    diff.changes.nodes.modified = currentGraph.nodes
+      .filter((n) => {
         const versionNode = versionNodesMap.get(n.id);
         if (!versionNode) return false;
         return JSON.stringify(n) !== JSON.stringify(versionNode);
       })
-      .map((n: any) => ({
+      .map((n) => ({
         current: n,
-        previous: versionNodesMap.get(n.id),
+        previous: versionNodesMap.get(n.id)!,
       }));
 
     // Find edge changes
     const currentEdgeIds = new Set(
-      (currentGraph.edges || []).map((e: any) => `${e.source}-${e.target}`),
+      currentGraph.edges.map((e) => `${e.source}-${e.target}`),
     );
     const versionEdgeIds = new Set(
-      (versionGraph.edges || []).map((e: any) => `${e.source}-${e.target}`),
+      versionGraph.edges.map((e) => `${e.source}-${e.target}`),
     );
 
-    diff.changes.edges.added = (currentGraph.edges || []).filter(
-      (e: any) => !versionEdgeIds.has(`${e.source}-${e.target}`),
+    diff.changes.edges.added = currentGraph.edges.filter(
+      (e) => !versionEdgeIds.has(`${e.source}-${e.target}`),
     );
 
-    diff.changes.edges.removed = (versionGraph.edges || []).filter(
-      (e: any) => !currentEdgeIds.has(`${e.source}-${e.target}`),
+    diff.changes.edges.removed = versionGraph.edges.filter(
+      (e) => !currentEdgeIds.has(`${e.source}-${e.target}`),
     );
 
     return diff;

@@ -12,45 +12,10 @@ import {
 } from '@nestjs/common';
 import { SubWorkflowService } from './subworkflow.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-
-interface InputSchemaItem {
-  name: string;
-  type: string;
-  label: string;
-  description?: string;
-  required?: boolean;
-  default?: unknown;
-}
-
-interface OutputSchemaItem {
-  name: string;
-  type: string;
-  label: string;
-  description?: string;
-}
-
-interface CreateSubWorkflowDto {
-  workflowId: string;
-  name: string;
-  description?: string;
-  category?: string;
-  icon?: string;
-  inputSchema: InputSchemaItem[];
-  outputSchema: OutputSchemaItem[];
-  isPublic?: boolean;
-  isShared?: boolean;
-}
-
-interface UpdateSubWorkflowDto {
-  name?: string;
-  description?: string;
-  category?: string;
-  icon?: string;
-  inputSchema?: InputSchemaItem[];
-  outputSchema?: OutputSchemaItem[];
-  isPublic?: boolean;
-  isShared?: boolean;
-}
+import type {
+  CreateSubWorkflowDto,
+  UpdateSubWorkflowDto,
+} from '@ws-flows/shared';
 
 @Controller('subworkflows')
 @UseGuards(JwtAuthGuard)

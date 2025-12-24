@@ -31,6 +31,7 @@ export interface StoredDataReference {
   compressed: boolean;
   checksum: string;
   storedAt: string;
+  [key: string]: string | number | boolean;
 }
 
 /**

@@ -1,45 +1,14 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma } from '@prisma/client';
-
-interface InputSchemaItem {
-  name: string;
-  type: string;
-  label: string;
-  description?: string;
-  required?: boolean;
-  default?: unknown;
-}
-
-interface OutputSchemaItem {
-  name: string;
-  type: string;
-  label: string;
-  description?: string;
-}
-
-interface CreateSubWorkflowDto {
-  workflowId: string;
-  name: string;
-  description?: string;
-  category?: string;
-  icon?: string;
-  inputSchema: InputSchemaItem[];
-  outputSchema: OutputSchemaItem[];
-  isPublic?: boolean;
-  isShared?: boolean;
-}
-
-interface UpdateSubWorkflowDto {
-  name?: string;
-  description?: string;
-  category?: string;
-  icon?: string;
-  inputSchema?: InputSchemaItem[];
-  outputSchema?: OutputSchemaItem[];
-  isPublic?: boolean;
-  isShared?: boolean;
-}
+import {
+  InputSchemaItem,
+  OutputSchemaItem,
+  CreateSubWorkflowDto,
+  UpdateSubWorkflowDto,
+  toInputSchema,
+  toOutputSchema,
+} from '@ws-flows/shared';
 
 @Injectable()
 export class SubWorkflowService {
@@ -80,8 +49,8 @@ export class SubWorkflowService {
         description: dto.description,
         category: dto.category || 'custom',
         icon: dto.icon,
-        inputSchema: dto.inputSchema as any,
-        outputSchema: dto.outputSchema as any,
+        inputSchema: dto.inputSchema as unknown as Prisma.InputJsonValue,
+        outputSchema: dto.outputSchema as unknown as Prisma.InputJsonValue,
         isPublic: dto.isPublic || false,
         isShared: dto.isShared || false,
         publishedAt: new Date(),
@@ -124,8 +93,8 @@ export class SubWorkflowService {
         description: dto.description,
         category: dto.category,
         icon: dto.icon,
-        inputSchema: dto.inputSchema as any,
-        outputSchema: dto.outputSchema as any,
+        inputSchema: dto.inputSchema as unknown as Prisma.InputJsonValue,
+        outputSchema: dto.outputSchema as unknown as Prisma.InputJsonValue,
         isPublic: dto.isPublic,
         isShared: dto.isShared,
       },
@@ -173,8 +142,8 @@ export class SubWorkflowService {
         description: subWorkflow.description,
         category: subWorkflow.category,
         icon: subWorkflow.icon,
-        inputSchema: subWorkflow.inputSchema as any,
-        outputSchema: subWorkflow.outputSchema as any,
+        inputSchema: subWorkflow.inputSchema as Prisma.InputJsonValue,
+        outputSchema: subWorkflow.outputSchema as Prisma.InputJsonValue,
         isPublic: subWorkflow.isPublic,
         isShared: subWorkflow.isShared,
         version: subWorkflow.version + 1,
