@@ -10,6 +10,18 @@ import {
   toOutputSchema,
 } from '@ws-flows/shared';
 
+// Maximum recursion depth for sub-workflow calls
+const MAX_RECURSION_DEPTH = 10;
+
+// Execution context for tracking recursion
+export interface SubWorkflowExecutionContext {
+  parentExecutionId: string;
+  depth: number;
+  callStack: string[]; // Track workflow IDs to detect cycles
+  inputMapping: Record<string, string>;
+  outputMapping: Record<string, string>;
+}
+
 @Injectable()
 export class SubWorkflowService {
   private readonly logger = new Logger(SubWorkflowService.name);
@@ -549,5 +561,268 @@ export class SubWorkflowService {
       valid: errors.length === 0,
       errors,
     };
+  }
+
+  /**
+   * Validate execution context for recursion limits
+   */
+  validateExecutionContext(
+    context: SubWorkflowExecutionContext,
+    workflowId: string,
+  ): { valid: boolean; error?: string } {
+    // Check depth limit
+    if (context.depth >= MAX_RECURSION_DEPTH) {
+      return {
+        valid: false,
+        error: `Maximum recursion depth (${MAX_RECURSION_DEPTH}) exceeded. ` +
+          `Current depth: ${context.depth}`,
+      };
+    }
+
+    // Check for circular calls
+    if (context.callStack.includes(workflowId)) {
+      const cycleIndex = context.callStack.indexOf(workflowId);
+      const cyclePath = [...context.callStack.slice(cycleIndex), workflowId].join(' -> ');
+      return {
+        valid: false,
+        error: `Circular sub-workflow call detected: ${cyclePath}`,
+      };
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * Create execution context for a sub-workflow call
+   */
+  createExecutionContext(
+    parentExecutionId: string,
+    parentContext: SubWorkflowExecutionContext | null,
+    workflowId: string,
+    inputMapping: Record<string, string>,
+    outputMapping: Record<string, string>,
+  ): SubWorkflowExecutionContext {
+    return {
+      parentExecutionId,
+      depth: parentContext ? parentContext.depth + 1 : 0,
+      callStack: parentContext
+        ? [...parentContext.callStack, workflowId]
+        : [workflowId],
+      inputMapping,
+      outputMapping,
+    };
+  }
+
+  /**
+   * Check for circular dependencies before adding a sub-workflow
+   */
+  async checkCircularDependency(
+    parentWorkflowId: string,
+    childWorkflowId: string,
+    visited: Set<string> = new Set(),
+  ): Promise<{ hasCircle: boolean; path?: string[] }> {
+    if (parentWorkflowId === childWorkflowId) {
+      return { hasCircle: true, path: [parentWorkflowId, childWorkflowId] };
+    }
+
+    if (visited.has(childWorkflowId)) {
+      return { hasCircle: false };
+    }
+    visited.add(childWorkflowId);
+
+    // Get all sub-workflows used by the child
+    const childUsages = await this.prisma.subWorkflowUsage.findMany({
+      where: { parentWorkflowId: childWorkflowId },
+      include: {
+        subWorkflow: true,
+      },
+    });
+
+    for (const usage of childUsages) {
+      const nestedWorkflowId = usage.subWorkflow.workflowId;
+
+      if (nestedWorkflowId === parentWorkflowId) {
+        return {
+          hasCircle: true,
+          path: [parentWorkflowId, childWorkflowId, nestedWorkflowId],
+        };
+      }
+
+      const result = await this.checkCircularDependency(
+        parentWorkflowId,
+        nestedWorkflowId,
+        visited,
+      );
+
+      if (result.hasCircle) {
+        return {
+          hasCircle: true,
+          path: [parentWorkflowId, childWorkflowId, ...(result.path || [])],
+        };
+      }
+    }
+
+    return { hasCircle: false };
+  }
+
+  /**
+   * Get the full dependency tree for visualization
+   */
+  async getDependencyTree(
+    workflowId: string,
+    depth: number = 0,
+    maxDepth: number = 5,
+    visited: Set<string> = new Set(),
+  ): Promise<{
+    workflowId: string;
+    name: string;
+    depth: number;
+    children: any[];
+    hasCircularRef: boolean;
+  }> {
+    // Prevent infinite loops
+    if (visited.has(workflowId)) {
+      return {
+        workflowId,
+        name: '(circular reference)',
+        depth,
+        children: [],
+        hasCircularRef: true,
+      };
+    }
+
+    if (depth >= maxDepth) {
+      return {
+        workflowId,
+        name: '(max depth reached)',
+        depth,
+        children: [],
+        hasCircularRef: false,
+      };
+    }
+
+    visited.add(workflowId);
+
+    // Get workflow info
+    const workflow = await this.prisma.workflow.findUnique({
+      where: { id: workflowId },
+      select: { id: true, name: true },
+    });
+
+    if (!workflow) {
+      return {
+        workflowId,
+        name: '(not found)',
+        depth,
+        children: [],
+        hasCircularRef: false,
+      };
+    }
+
+    // Get sub-workflow usages
+    const usages = await this.prisma.subWorkflowUsage.findMany({
+      where: { parentWorkflowId: workflowId },
+      include: {
+        subWorkflow: {
+          include: {
+            workflow: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    const children = await Promise.all(
+      usages.map(async (usage) => {
+        return this.getDependencyTree(
+          usage.subWorkflow.workflowId,
+          depth + 1,
+          maxDepth,
+          new Set(visited),
+        );
+      }),
+    );
+
+    return {
+      workflowId: workflow.id,
+      name: workflow.name,
+      depth,
+      children,
+      hasCircularRef: false,
+    };
+  }
+
+  /**
+   * Map input data from parent to sub-workflow using expressions
+   */
+  mapInputData(
+    inputMapping: Record<string, string>,
+    parentData: Record<string, any>,
+  ): Record<string, any> {
+    const result: Record<string, any> = {};
+
+    for (const [targetKey, expression] of Object.entries(inputMapping)) {
+      result[targetKey] = this.evaluateExpression(expression, parentData);
+    }
+
+    return result;
+  }
+
+  /**
+   * Map output data from sub-workflow to parent using expressions
+   */
+  mapOutputData(
+    outputMapping: Record<string, string>,
+    subWorkflowOutput: Record<string, any>,
+  ): Record<string, any> {
+    const result: Record<string, any> = {};
+
+    for (const [targetKey, expression] of Object.entries(outputMapping)) {
+      result[targetKey] = this.evaluateExpression(expression, subWorkflowOutput);
+    }
+
+    return result;
+  }
+
+  /**
+   * Evaluate a simple expression against data
+   * Supports: $.path.to.value, {{variable}}, and literal values
+   */
+  private evaluateExpression(expression: string, data: Record<string, any>): any {
+    // JSONPath-like expression
+    if (expression.startsWith('$.')) {
+      const path = expression.slice(2).split('.');
+      let value: any = data;
+      for (const key of path) {
+        if (value === undefined || value === null) return undefined;
+        // Handle array indices
+        if (/^\d+$/.test(key)) {
+          value = value[parseInt(key, 10)];
+        } else {
+          value = value[key];
+        }
+      }
+      return value;
+    }
+
+    // Template expression {{variable}}
+    if (expression.startsWith('{{') && expression.endsWith('}}')) {
+      const varName = expression.slice(2, -2).trim();
+      return data[varName];
+    }
+
+    // JSON value
+    try {
+      return JSON.parse(expression);
+    } catch {
+      // Return as literal string
+      return expression;
+    }
+  }
+
+  /**
+   * Get max recursion depth setting
+   */
+  getMaxRecursionDepth(): number {
+    return MAX_RECURSION_DEPTH;
   }
 }

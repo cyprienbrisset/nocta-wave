@@ -143,6 +143,7 @@ interface WorkflowState {
 
   // Groups
   createGroup: (label: string, color?: string) => void;
+  updateGroup: (groupId: string, updates: Partial<Pick<NodeGroup, 'label' | 'color'>>) => void;
   deleteGroup: (groupId: string) => void;
   toggleGroupCollapse: (groupId: string) => void;
   addNodesToGroup: (groupId: string, nodeIds: string[]) => void;
@@ -538,6 +539,15 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     set({
       groups: [...get().groups, newGroup],
       nodes: updatedNodes,
+      isDirty: true,
+    });
+  },
+
+  updateGroup: (groupId, updates) => {
+    set({
+      groups: get().groups.map((g) =>
+        g.id === groupId ? { ...g, ...updates } : g
+      ),
       isDirty: true,
     });
   },

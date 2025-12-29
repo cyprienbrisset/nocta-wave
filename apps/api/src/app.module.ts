@@ -35,6 +35,12 @@ import { BranchModule } from './modules/branch/branch.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { SecurityModule } from './modules/security/security.module';
+import { NotificationModule } from './modules/notification/notification.module';
+import { SuggestionModule } from './modules/suggestion/suggestion.module';
+import { SearchModule } from './modules/search/search.module';
+import { FavoritesModule } from './modules/favorites/favorites.module';
+import { QueueModule } from './modules/queue/queue.module';
+import { DatabaseOptimizationModule } from './modules/database-optimization/database-optimization.module';
 
 @Module({
   imports: [
@@ -89,6 +95,12 @@ import { SecurityModule } from './modules/security/security.module';
     MonitoringModule,
     StorageModule,
     SecurityModule,
+    NotificationModule,
+    SuggestionModule,
+    SearchModule,
+    FavoritesModule,
+    QueueModule,
+    DatabaseOptimizationModule,
   ],
 })
 export class AppModule {}

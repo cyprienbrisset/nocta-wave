@@ -24,12 +24,14 @@ import { CollaborationLinkController } from './collaboration-link.controller';
 import { TeamModule } from '../team/team.module';
 import { DatabaseModule } from '../../database/database.module';
 import { ExecutionModule } from '../execution/execution.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
     TeamModule,
     DatabaseModule,
     forwardRef(() => ExecutionModule),
+    forwardRef(() => NotificationModule),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

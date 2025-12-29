@@ -40,7 +40,8 @@
       "Bash(grep:*)",
       "Bash(pnpm --filter @ws-flows/api add:*)",
       "Bash(xargs dirname:*)",
-      "Bash(ipconfig getifaddr:*)"
+      "Bash(ipconfig getifaddr:*)",
+      "Bash(npx prisma validate:*)"
     ]
   }
 }

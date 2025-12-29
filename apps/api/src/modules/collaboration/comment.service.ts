@@ -2,17 +2,22 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { TeamService } from '../team/team.service';
+import { NotificationService } from '../notification/notification.service';
 import { CreateCommentDto, UpdateCommentDto, CommentQueryDto } from './dto/comment.dto';
 
 @Injectable()
 export class CommentService {
+  private readonly logger = new Logger(CommentService.name);
+
   constructor(
     private prisma: PrismaService,
     private teamService: TeamService,
+    private notificationService: NotificationService,
   ) {}
 
   async create(userId: string, dto: CreateCommentDto) {
@@ -43,7 +48,10 @@ export class CommentService {
       }
     }
 
-    return this.prisma.comment.create({
+    // Parse mentions from content (@username or @name)
+    const mentionedUsers = await this.parseMentions(dto.content, workflow.teamId);
+
+    const comment = await this.prisma.comment.create({
       data: {
         workflowId: dto.workflowId,
         nodeId: dto.nodeId,
@@ -51,6 +59,13 @@ export class CommentService {
         content: dto.content,
         parentId: dto.parentId,
         position: dto.position as Prisma.InputJsonValue | undefined,
+        mentions: mentionedUsers.length > 0
+          ? {
+              create: mentionedUsers.map((user) => ({
+                userId: user.id,
+              })),
+            }
+          : undefined,
       },
       include: {
         author: {
@@ -73,8 +88,91 @@ export class CommentService {
             },
           },
         },
+        mentions: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
+
+    // Get author name for notifications
+    const author = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    const authorName = author?.name || 'Someone';
+
+    // Send notifications to mentioned users
+    for (const mentionedUser of mentionedUsers) {
+      if (mentionedUser.id !== userId) {
+        await this.notificationService.notifyMention(mentionedUser.id, authorName, {
+          type: 'comment',
+          workflowId: dto.workflowId,
+          workflowName: workflow.name,
+          commentId: comment.id,
+        });
+      }
+    }
+
+    // If this is a reply, notify the original comment author
+    if (dto.parentId) {
+      const parentComment = await this.prisma.comment.findUnique({
+        where: { id: dto.parentId },
+        select: { authorId: true },
+      });
+
+      if (parentComment && parentComment.authorId !== userId) {
+        await this.notificationService.notifyCommentReply(
+          parentComment.authorId,
+          authorName,
+          dto.workflowId,
+          workflow.name,
+          comment.id,
+        );
+      }
+    }
+
+    this.logger.log(`Comment ${comment.id} created with ${mentionedUsers.length} mentions`);
+    return comment;
+  }
+
+  /**
+   * Parse @mentions from content and find matching users
+   */
+  private async parseMentions(
+    content: string,
+    teamId: string,
+  ): Promise<{ id: string; name: string | null }[]> {
+    const mentionRegex = /@(\w+)/g;
+    const matches = content.match(mentionRegex);
+
+    if (!matches || matches.length === 0) {
+      return [];
+    }
+
+    const mentionedNames = matches.map((m) => m.substring(1).toLowerCase());
+
+    // Find users in the team that match the mentioned names
+    const users = await this.prisma.user.findMany({
+      where: {
+        teamMemberships: {
+          some: { teamId },
+        },
+        OR: [
+          { name: { in: mentionedNames, mode: 'insensitive' } },
+          { email: { in: mentionedNames.map((n) => `${n}@%`), mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true, name: true },
+    });
+
+    return users;
   }
 
   async findByWorkflow(workflowId: string, userId: string, query?: CommentQueryDto) {

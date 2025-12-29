@@ -283,4 +283,138 @@ export class BranchController {
     const teamId = req.user.currentTeamId;
     return this.branchService.getDiff(sourceBranchId, targetBranchId, teamId);
   }
+
+  // ============================================================================
+  // VERSION TAGS
+  // ============================================================================
+
+  /**
+   * Get all version tags for a workflow
+   */
+  @Get('workflow/:workflowId/tags')
+  async getVersionTags(@Param('workflowId') workflowId: string, @Req() req: any) {
+    const teamId = req.user.currentTeamId;
+    return this.branchService.getVersionTags(workflowId, teamId);
+  }
+
+  /**
+   * Get releases only for a workflow
+   */
+  @Get('workflow/:workflowId/releases')
+  async getReleases(@Param('workflowId') workflowId: string, @Req() req: any) {
+    const teamId = req.user.currentTeamId;
+    return this.branchService.getReleases(workflowId, teamId);
+  }
+
+  /**
+   * Create a version tag
+   */
+  @Post('tags')
+  async createVersionTag(
+    @Body()
+    dto: {
+      workflowId: string;
+      commitId: string;
+      name: string;
+      description?: string;
+      isRelease?: boolean;
+      metadata?: Record<string, unknown>;
+    },
+    @Req() req: any,
+  ) {
+    const teamId = req.user.currentTeamId;
+    const userId = req.user.id;
+    return this.branchService.createVersionTag(teamId, userId, dto);
+  }
+
+  /**
+   * Get a specific version tag
+   */
+  @Get('tags/:id')
+  async getVersionTag(@Param('id') id: string, @Req() req: any) {
+    const teamId = req.user.currentTeamId;
+    return this.branchService.getVersionTag(id, teamId);
+  }
+
+  /**
+   * Delete a version tag
+   */
+  @Delete('tags/:id')
+  async deleteVersionTag(@Param('id') id: string, @Req() req: any) {
+    const teamId = req.user.currentTeamId;
+    return this.branchService.deleteVersionTag(id, teamId);
+  }
+
+  // ============================================================================
+  // ROLLBACK
+  // ============================================================================
+
+  /**
+   * Rollback a branch to a specific commit
+   */
+  @Post(':id/rollback')
+  async rollbackToCommit(
+    @Param('id') branchId: string,
+    @Body() dto: { commitId: string; createBackupTag?: boolean },
+    @Req() req: any,
+  ) {
+    const teamId = req.user.currentTeamId;
+    const userId = req.user.id;
+    return this.branchService.rollbackToCommit(branchId, dto.commitId, teamId, userId, {
+      createBackupTag: dto.createBackupTag,
+    });
+  }
+
+  /**
+   * Rollback to a specific version tag
+   */
+  @Post('tags/:id/rollback')
+  async rollbackToTag(
+    @Param('id') tagId: string,
+    @Body() dto: { createBackupTag?: boolean; targetBranchId?: string },
+    @Req() req: any,
+  ) {
+    const teamId = req.user.currentTeamId;
+    const userId = req.user.id;
+    return this.branchService.rollbackToTag(tagId, teamId, userId, dto);
+  }
+
+  /**
+   * Get rollback history for a branch
+   */
+  @Get(':id/rollback-history')
+  async getRollbackHistory(@Param('id') branchId: string, @Req() req: any) {
+    const teamId = req.user.currentTeamId;
+    return this.branchService.getRollbackHistory(branchId, teamId);
+  }
+
+  // ============================================================================
+  // ENHANCED DIFF
+  // ============================================================================
+
+  /**
+   * Get detailed diff between two commits
+   */
+  @Get('commits/diff')
+  async getCommitDiff(
+    @Query('source') sourceCommitId: string,
+    @Query('target') targetCommitId: string,
+    @Req() req: any,
+  ) {
+    const teamId = req.user.currentTeamId;
+    return this.branchService.getCommitDiff(sourceCommitId, targetCommitId, teamId);
+  }
+
+  /**
+   * Get diff between current branch state and a specific commit
+   */
+  @Get(':id/diff/:commitId')
+  async getBranchCommitDiff(
+    @Param('id') branchId: string,
+    @Param('commitId') commitId: string,
+    @Req() req: any,
+  ) {
+    const teamId = req.user.currentTeamId;
+    return this.branchService.getBranchCommitDiff(branchId, commitId, teamId);
+  }
 }

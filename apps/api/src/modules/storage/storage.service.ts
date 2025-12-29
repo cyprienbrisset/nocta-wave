@@ -309,6 +309,58 @@ export class ObjectStorageService implements OnModuleInit {
   }
 
   /**
+   * Upload a buffer to object storage
+   */
+  async uploadBuffer(
+    bucket: string,
+    key: string,
+    data: Buffer,
+    options?: {
+      contentType?: string;
+      metadata?: Record<string, string>;
+    },
+  ): Promise<void> {
+    if (!this.isEnabled()) {
+      throw new Error('Object storage is not enabled');
+    }
+
+    await this.client!.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: data,
+        ContentType: options?.contentType || 'application/octet-stream',
+        Metadata: options?.metadata,
+      }),
+    );
+  }
+
+  /**
+   * Download a buffer from object storage
+   */
+  async downloadBuffer(bucket: string, key: string): Promise<Buffer> {
+    if (!this.isEnabled()) {
+      throw new Error('Object storage is not enabled');
+    }
+
+    const response = await this.client!.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      }),
+    );
+
+    const bodyStream = response.Body as Readable;
+    const chunks: Buffer[] = [];
+
+    for await (const chunk of bodyStream) {
+      chunks.push(Buffer.from(chunk));
+    }
+
+    return Buffer.concat(chunks);
+  }
+
+  /**
    * Build object key for execution log data
    */
   private buildKey(executionId: string, nodeId: string, dataType: string): string {

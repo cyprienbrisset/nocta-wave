@@ -40,6 +40,22 @@ model User {
   chatMentions        ChatMention[]
   workflowChanges     WorkflowChange[]
   collaborationLinks  CollaborationLink[]
+  // Notifications & Preferences
+  notifications       Notification[]
+  preferences         UserPreferences?
+  // Suggestions
+  suggestions         Suggestion[]       @relation("SuggestionAuthor")
+  suggestionReviews   SuggestionReview[] @relation("SuggestionReviewer")
+  suggestionComments  SuggestionComment[] @relation("SuggestionCommentAuthor")
+  // Favorites & Recent
+  workflowFavorites   WorkflowFavorite[]
+  workflowAccesses    WorkflowAccess[]
+  // Comment mentions
+  commentMentions     CommentMention[]
+  // Template ratings
+  templateRatings     TemplateRating[]
+  // Version tags created
+  versionTags         VersionTag[]     @relation("VersionTagCreator")
 
   @@map("users")
 }
@@ -98,6 +114,8 @@ model Team {
   templates    WorkflowTemplate[]
   environments Environment[]
   variables    Variable[]
+  // Template sharing
+  sharedTemplates TemplateShare[]
 
   @@map("teams")
 }
@@ -163,6 +181,13 @@ model Workflow {
   chatMessages       ChatMessage[]
   changes            WorkflowChange[]
   collaborationLinks CollaborationLink[]
+  // Suggestions
+  suggestions        Suggestion[]
+  // Favorites & Access tracking
+  favorites          WorkflowFavorite[]
+  accesses           WorkflowAccess[]
+  // Version tags
+  versionTags        VersionTag[]
 
   @@index([teamId])
   @@index([createdById])
@@ -377,6 +402,7 @@ model Comment {
   author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
   parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies  Comment[] @relation("CommentReplies")
+  mentions CommentMention[]
 
   @@index([workflowId])
   @@index([nodeId])
@@ -655,6 +681,7 @@ model WorkflowTemplate {
   templateCategory TemplateCategory? @relation("TemplateToCategory", fields: [categoryId], references: [id])
   parameters     TemplateParameter[]
   ratings        TemplateRating[]
+  shares         TemplateShare[]
 
   @@index([teamId])
   @@index([category])
@@ -778,18 +805,105 @@ model TemplateParameter {
 }
 
 model TemplateRating {
-  id         String   @id @default(uuid())
-  templateId String   @map("template_id")
-  userId     String   @map("user_id")
-  rating     Int      // 1-5
-  review     String?
-  createdAt  DateTime @default(now()) @map("created_at")
+  id           String       @id @default(uuid())
+  templateId   String       @map("template_id")
+  userId       String       @map("user_id")
+  rating       Int          // 1-5
+  review       String?
+  status       RatingStatus @default(PUBLISHED)
+  helpfulCount Int          @default(0) @map("helpful_count")
+  reportCount  Int          @default(0) @map("report_count")
+  authorReply  String?      @map("author_reply")
+  authorReplyAt DateTime?   @map("author_reply_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
 
   template   WorkflowTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reports    RatingReport[]
+  helpfuls   RatingHelpful[]
 
   @@unique([templateId, userId])
   @@index([templateId])
+  @@index([status])
   @@map("template_ratings")
+}
+
+model RatingReport {
+  id          String       @id @default(uuid())
+  ratingId    String       @map("rating_id")
+  reporterId  String       @map("reporter_id")
+  reason      ReportReason
+  description String?
+  status      ReportStatus @default(PENDING)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  resolvedAt  DateTime?    @map("resolved_at")
+  resolvedById String?     @map("resolved_by_id")
+
+  rating     TemplateRating @relation(fields: [ratingId], references: [id], onDelete: Cascade)
+
+  @@unique([ratingId, reporterId])
+  @@index([ratingId])
+  @@index([status])
+  @@map("rating_reports")
+}
+
+model RatingHelpful {
+  id        String   @id @default(uuid())
+  ratingId  String   @map("rating_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  rating    TemplateRating @relation(fields: [ratingId], references: [id], onDelete: Cascade)
+
+  @@unique([ratingId, userId])
+  @@index([ratingId])
+  @@map("rating_helpfuls")
+}
+
+enum RatingStatus {
+  PENDING
+  PUBLISHED
+  HIDDEN
+  REMOVED
+}
+
+enum ReportReason {
+  SPAM
+  INAPPROPRIATE
+  MISLEADING
+  OFF_TOPIC
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+// Template sharing between teams
+model TemplateShare {
+  id               String          @id @default(uuid())
+  templateId       String          @map("template_id")
+  sharedWithTeamId String          @map("shared_with_team_id")
+  sharedByUserId   String          @map("shared_by_user_id")
+  permission       SharePermission @default(USE)
+  createdAt        DateTime        @default(now()) @map("created_at")
+
+  template       WorkflowTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  sharedWithTeam Team             @relation(fields: [sharedWithTeamId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, sharedWithTeamId])
+  @@index([templateId])
+  @@index([sharedWithTeamId])
+  @@map("template_shares")
+}
+
+enum SharePermission {
+  USE   // Can deploy the template
+  COPY  // Can copy and modify
+  EDIT  // Can edit the original template
 }
 
 // ============================================================================
@@ -921,6 +1035,7 @@ model WorkflowBranch {
   commits         BranchCommit[]
   pullRequests    WorkflowPullRequest[] @relation("PRSourceBranch")
   targetPRs       WorkflowPullRequest[] @relation("PRTargetBranch")
+  versionTags     VersionTag[]
 
   @@unique([workflowId, name])
   @@index([workflowId])
@@ -942,6 +1057,7 @@ model BranchCommit {
   branch      WorkflowBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
   parent      BranchCommit?  @relation("CommitHistory", fields: [parentId], references: [id])
   children    BranchCommit[] @relation("CommitHistory")
+  versionTags VersionTag[]
 
   @@index([branchId])
   @@index([parentId])
@@ -1040,6 +1156,31 @@ enum ReviewStatus {
   APPROVED
   CHANGES_REQUESTED
   COMMENTED
+}
+
+// Version Tags - Similar to Git tags for marking stable versions
+model VersionTag {
+  id          String   @id @default(uuid())
+  workflowId  String   @map("workflow_id")
+  branchId    String?  @map("branch_id")
+  commitId    String   @map("commit_id")
+  name        String   // e.g., "v1.0.0", "release-2024-01"
+  description String?
+  createdById String   @map("created_by_id")
+  isRelease   Boolean  @default(false) @map("is_release") // Marks production releases
+  metadata    Json?    // Additional tag metadata
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workflow    Workflow       @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  branch      WorkflowBranch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  commit      BranchCommit   @relation(fields: [commitId], references: [id], onDelete: Cascade)
+  createdBy   User           @relation("VersionTagCreator", fields: [createdById], references: [id])
+
+  @@unique([workflowId, name])
+  @@index([workflowId])
+  @@index([branchId])
+  @@index([commitId])
+  @@map("version_tags")
 }
 
 // ============================================================================
@@ -1321,4 +1462,190 @@ enum SpanStatus {
   UNSET
   OK
   ERROR
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String           @map("user_id")
+  type        NotificationType
+  title       String
+  message     String
+  data        Json?            // Additional context (workflowId, commentId, etc.)
+  read        Boolean          @default(false)
+  readAt      DateTime?        @map("read_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  MENTION
+  COMMENT_REPLY
+  SUGGESTION_RECEIVED
+  SUGGESTION_APPROVED
+  SUGGESTION_REJECTED
+  SUGGESTION_MERGED
+  WORKFLOW_SHARED
+  TEMPLATE_SHARED
+  TEMPLATE_RATED
+  PR_REVIEW_REQUESTED
+  PR_APPROVED
+  PR_CHANGES_REQUESTED
+  SYSTEM
+}
+
+// ============================================================================
+// SUGGESTIONS (Proposal Mode)
+// ============================================================================
+
+model Suggestion {
+  id                String           @id @default(uuid())
+  workflowId        String           @map("workflow_id")
+  branchId          String?          @map("branch_id")
+  authorId          String           @map("author_id")
+  title             String
+  description       String?
+  status            SuggestionStatus @default(PENDING)
+  graphChanges      Json             @map("graph_changes") // Diff of modifications
+  requiredApprovals Int              @default(1) @map("required_approvals")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+  mergedAt          DateTime?        @map("merged_at")
+  mergedById        String?          @map("merged_by_id")
+  closedAt          DateTime?        @map("closed_at")
+
+  workflow          Workflow           @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  author            User               @relation("SuggestionAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  reviews           SuggestionReview[]
+  comments          SuggestionComment[]
+
+  @@index([workflowId])
+  @@index([authorId])
+  @@index([status])
+  @@map("suggestions")
+}
+
+model SuggestionReview {
+  id           String       @id @default(uuid())
+  suggestionId String       @map("suggestion_id")
+  reviewerId   String       @map("reviewer_id")
+  status       ReviewStatus
+  comment      String?
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  suggestion   Suggestion   @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  reviewer     User         @relation("SuggestionReviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@unique([suggestionId, reviewerId])
+  @@index([suggestionId])
+  @@index([reviewerId])
+  @@map("suggestion_reviews")
+}
+
+model SuggestionComment {
+  id           String   @id @default(uuid())
+  suggestionId String   @map("suggestion_id")
+  authorId     String   @map("author_id")
+  content      String
+  parentId     String?  @map("parent_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  suggestion   Suggestion         @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  author       User               @relation("SuggestionCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  parent       SuggestionComment? @relation("SuggestionCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies      SuggestionComment[] @relation("SuggestionCommentReplies")
+
+  @@index([suggestionId])
+  @@index([authorId])
+  @@map("suggestion_comments")
+}
+
+enum SuggestionStatus {
+  PENDING
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  MERGED
+  CLOSED
+}
+
+// ============================================================================
+// USER PREFERENCES
+// ============================================================================
+
+model UserPreferences {
+  id                String   @id @default(uuid())
+  userId            String   @unique @map("user_id")
+  keyboardShortcuts Json?    @map("keyboard_shortcuts") // Map shortcutId -> keys
+  theme             String   @default("dark")
+  editorSettings    Json?    @map("editor_settings")
+  notificationSettings Json? @map("notification_settings")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+// ============================================================================
+// FAVORITES & RECENT WORKFLOWS
+// ============================================================================
+
+model WorkflowFavorite {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  workflowId String   @map("workflow_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workflowId])
+  @@index([userId])
+  @@map("workflow_favorites")
+}
+
+model WorkflowAccess {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  workflowId String   @map("workflow_id")
+  accessedAt DateTime @default(now()) @map("accessed_at")
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([userId, accessedAt])
+  @@index([workflowId])
+  @@map("workflow_accesses")
+}
+
+// ============================================================================
+// COMMENT MENTIONS (extends existing Comment model)
+// ============================================================================
+
+model CommentMention {
+  id        String   @id @default(uuid())
+  commentId String   @map("comment_id")
+  userId    String   @map("user_id")
+  read      Boolean  @default(false)
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([userId, read])
+  @@map("comment_mentions")
 }
