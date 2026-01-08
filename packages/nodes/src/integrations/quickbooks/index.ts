@@ -154,14 +154,7 @@ export const quickbooksNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.object('entity', 'Single entity'),
-      output.array('entities', 'Query results'),
-      output.string('id', 'Entity ID'),
-      output.string('pdfUrl', 'PDF download URL'),
-      output.number('totalCount', 'Total count'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'invoices',
       operation: 'query',

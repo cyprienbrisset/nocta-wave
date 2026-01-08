@@ -155,14 +155,7 @@ export const supabaseNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('data', 'Query results'),
-      output.object('item', 'Single item'),
-      output.object('user', 'User data'),
-      output.string('url', 'Public URL'),
-      output.number('count', 'Row count'),
-    ],
+    outputs: [output.main({ description: 'Database operation result' })],
     defaults: {
       resource: 'database',
       operation: 'select',

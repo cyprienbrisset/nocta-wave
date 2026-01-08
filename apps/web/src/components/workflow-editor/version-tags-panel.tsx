@@ -257,8 +257,10 @@ export function VersionTagsPanel({
 
     tags.forEach((tag) => {
       const match = tag.name.match(versionPattern);
-      if (match) {
-        const [, major, minor, patch] = match.map(Number);
+      if (match && match[1] && match[2] && match[3]) {
+        const major = Number(match[1]);
+        const minor = Number(match[2]);
+        const patch = Number(match[3]);
         if (
           major > maxVersion.major ||
           (major === maxVersion.major && minor > maxVersion.minor) ||

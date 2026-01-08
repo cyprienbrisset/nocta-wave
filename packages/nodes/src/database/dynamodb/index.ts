@@ -153,14 +153,7 @@ export const dynamodbNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.object('item', 'Single item'),
-      output.array('items', 'Item list'),
-      output.number('count', 'Item count'),
-      output.number('scannedCount', 'Scanned count'),
-      output.object('lastEvaluatedKey', 'Pagination key'),
-    ],
+    outputs: [output.main({ description: 'Database operation result' })],
     defaults: {
       operation: 'getItem',
       key: {},

@@ -101,14 +101,7 @@ export const yamlNode: NodeDefinition = createNode(
         default: false,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.object('json', 'Parsed JSON data'),
-      output.string('yaml', 'Generated YAML string'),
-      output.array('queryResults', 'Query results'),
-      output.boolean('valid', 'Validation result'),
-      output.array('errors', 'Validation errors'),
-    ],
+    outputs: [output.main({ description: 'Transformation result' })],
     defaults: {
       operation: 'parse',
       indent: 2,

@@ -37,7 +37,7 @@ export const redisNode: NodeDefinition = createNode(
       input.number('ttl', 'TTL (seconds)', { description: 'Time to live' }),
       input.string('channel', 'Channel', { description: 'Pub/Sub channel' }),
     ],
-    outputs: [output.object('result', 'Operation result')],
+    outputs: [output.main({ description: 'Operation result' })],
     credentials: ['custom'],
   },
   async (nodeInput, context) => {

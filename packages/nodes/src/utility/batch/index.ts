@@ -140,15 +140,7 @@ export const batchNode: NodeDefinition = createNode(
         default: false,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('batches', 'Created batches'),
-      output.array('results', 'Processed results'),
-      output.object('aggregated', 'Aggregated result'),
-      output.number('batchCount', 'Number of batches'),
-      output.number('itemCount', 'Total items processed'),
-      output.object('stats', 'Processing statistics'),
-    ],
+    outputs: [output.main({ description: 'Utility operation result' })],
     defaults: {
       operation: 'chunk',
       batchSize: 10,

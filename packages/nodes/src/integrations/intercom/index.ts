@@ -157,13 +157,7 @@ export const intercomNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('data', 'List results'),
-      output.object('item', 'Single item'),
-      output.string('id', 'Created/updated item ID'),
-      output.string('nextCursor', 'Next page cursor'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'contacts',
       operation: 'list',

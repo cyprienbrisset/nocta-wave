@@ -30,7 +30,7 @@ export const discordNode: NodeDefinition = createNode(
       input.string('avatarUrl', 'Avatar URL', { description: 'Override avatar' }),
       input.json('embed', 'Embed', { description: 'Discord embed object' }),
     ],
-    outputs: [output.object('response', 'Discord response')],
+    outputs: [output.main({ description: 'Operation result' })],
     credentials: ['api_key'],
   },
   async (nodeInput, context) => {

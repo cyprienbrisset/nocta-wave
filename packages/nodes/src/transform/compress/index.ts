@@ -112,17 +112,7 @@ export const compressNode: NodeDefinition = createNode(
         description: 'Archive comment',
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.string('compressed', 'Compressed data (base64)'),
-      output.string('decompressed', 'Decompressed data'),
-      output.string('archivePath', 'Archive file path'),
-      output.string('extractPath', 'Extraction folder path'),
-      output.array('files', 'List of files in archive'),
-      output.number('originalSize', 'Original size in bytes'),
-      output.number('compressedSize', 'Compressed size in bytes'),
-      output.number('ratio', 'Compression ratio'),
-    ],
+    outputs: [output.main({ description: 'Transformation result' })],
     defaults: {
       operation: 'compress',
       algorithm: 'gzip',

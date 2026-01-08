@@ -108,12 +108,7 @@ export const graphqlNode: NodeDefinition = createNode(
         showWhen: { field: 'useAutomaticPersistedQueries', equals: true },
       }),
     ],
-    outputs: [
-      output.object('data', 'Response data from the GraphQL query'),
-      output.object('errors', 'Any GraphQL errors returned'),
-      output.object('extensions', 'GraphQL response extensions'),
-      output.object('headers', 'Response headers'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     credentials: ['api_key', 'oauth2', 'bearer_token'],
   },
   async (nodeInput, context) => {

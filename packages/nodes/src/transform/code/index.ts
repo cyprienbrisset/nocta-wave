@@ -46,7 +46,7 @@ return result;`,
         }
       ),
     ],
-    outputs: [output.object('result', 'Code execution result')],
+    outputs: [output.main({ description: 'Operation result' })],
     defaults: {
       mode: 'expression',
     },

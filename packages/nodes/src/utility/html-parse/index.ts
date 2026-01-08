@@ -260,10 +260,7 @@ export const htmlParseNode: NodeDefinition = createNode(
       input.boolean('includeSrc', 'Include src', { default: true }),
       input.boolean('includeAlt', 'Include alt', { default: true }),
     ],
-    outputs: [
-      output.any('result', 'Parsed result'),
-      output.number('count', 'Number of items found'),
-    ],
+    outputs: [output.main({ description: 'Utility operation result' })],
     defaults: { operation: 'extractText', includeHref: true, includeSrc: true, includeAlt: true },
   },
   async (nodeInput, context) => {

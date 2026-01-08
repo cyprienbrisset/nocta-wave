@@ -211,13 +211,7 @@ export const facebookAdsNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('items', 'List results'),
-      output.object('item', 'Single item'),
-      output.string('id', 'Item ID'),
-      output.object('insights', 'Insights data'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'campaigns',
       operation: 'list',

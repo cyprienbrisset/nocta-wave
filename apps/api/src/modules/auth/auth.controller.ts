@@ -7,13 +7,18 @@ import {
   UseGuards,
   Get,
   Request,
+  Res,
+  Req,
+  UnauthorizedException,
 } from '@nestjs/common';
+import { Request as ExpressRequest, Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import {
   RegisterDto,
@@ -28,14 +33,64 @@ import { CurrentUser } from './decorators/current-user.decorator';
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  /**
+   * Set HTTP-only cookies for tokens
+   */
+  private setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
+    const isProduction = this.configService.get('NODE_ENV') === 'production';
+    const cookieDomain = this.configService.get('COOKIE_DOMAIN');
+
+    // Access token cookie - short-lived
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'strict' : 'lax',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/',
+      ...(cookieDomain && { domain: cookieDomain }),
+    });
+
+    // Refresh token cookie - longer-lived
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'strict' : 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      path: '/api/auth', // Only sent to auth endpoints
+      ...(cookieDomain && { domain: cookieDomain }),
+    });
+  }
+
+  /**
+   * Clear auth cookies
+   */
+  private clearAuthCookies(res: Response) {
+    const cookieDomain = this.configService.get('COOKIE_DOMAIN');
+    const cookieOptions = {
+      httpOnly: true,
+      path: '/',
+      ...(cookieDomain && { domain: cookieDomain }),
+    };
+
+    res.clearCookie('accessToken', cookieOptions);
+    res.clearCookie('refreshToken', { ...cookieOptions, path: '/api/auth' });
+  }
 
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({ status: 201, type: AuthResponseDto })
   @ApiResponse({ status: 409, description: 'Email already registered' })
-  async register(@Body() dto: RegisterDto): Promise<AuthResponseDto> {
+  async register(
+    @Body() dto: RegisterDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AuthResponseDto> {
     const tokens = await this.authService.register(dto);
+    this.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
     return {
       ...tokens,
       message: 'Registration successful',
@@ -47,8 +102,12 @@ export class AuthController {
   @ApiOperation({ summary: 'Login user' })
   @ApiResponse({ status: 200, type: AuthResponseDto })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  async login(@Body() dto: LoginDto): Promise<AuthResponseDto> {
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AuthResponseDto> {
     const tokens = await this.authService.login(dto);
+    this.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
     return {
       ...tokens,
       message: 'Login successful',
@@ -60,8 +119,18 @@ export class AuthController {
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, type: AuthResponseDto })
   @ApiResponse({ status: 401, description: 'Invalid refresh token' })
-  async refreshToken(@Body() dto: RefreshTokenDto): Promise<AuthResponseDto> {
-    const tokens = await this.authService.refreshToken(dto);
+  async refreshToken(
+    @Req() req: ExpressRequest,
+    @Body() dto: RefreshTokenDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AuthResponseDto> {
+    // Get refresh token from cookie or body (for backwards compatibility)
+    const refreshToken = req.cookies?.refreshToken || dto?.refreshToken;
+    if (!refreshToken) {
+      throw new UnauthorizedException('No refresh token provided');
+    }
+    const tokens = await this.authService.refreshToken({ refreshToken });
+    this.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
     return {
       ...tokens,
       message: 'Token refreshed',
@@ -72,8 +141,17 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Logout user' })
   @ApiResponse({ status: 200 })
-  async logout(@Body() dto: RefreshTokenDto): Promise<{ message: string }> {
-    await this.authService.logout(dto.refreshToken);
+  async logout(
+    @Req() req: ExpressRequest,
+    @Body() dto: RefreshTokenDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ message: string }> {
+    // Get refresh token from cookie or body (for backwards compatibility)
+    const refreshToken = req.cookies?.refreshToken || dto?.refreshToken;
+    if (refreshToken) {
+      await this.authService.logout(refreshToken);
+    }
+    this.clearAuthCookies(res);
     return { message: 'Logged out successfully' };
   }
 

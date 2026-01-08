@@ -99,14 +99,7 @@ export const googleAINode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.string('text', 'Generated text'),
-      output.array('candidates', 'Response candidates'),
-      output.array('embedding', 'Text embedding vector'),
-      output.number('tokenCount', 'Token count'),
-      output.object('usageMetadata', 'Usage statistics'),
-      output.string('finishReason', 'Finish reason'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'generateContent',
       model: 'gemini-1.5-pro',

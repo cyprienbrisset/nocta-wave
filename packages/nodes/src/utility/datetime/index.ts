@@ -202,11 +202,7 @@ export const datetimeNode: NodeDefinition = createNode(
       ], { default: 'days' }),
       input.string('input2', 'Second Date', { description: 'Second date for comparison/diff' }),
     ],
-    outputs: [
-      output.string('result', 'Formatted date/time result'),
-      output.number('timestamp', 'Unix timestamp'),
-      output.object('parts', 'Date parts (year, month, day, etc.)'),
-    ],
+    outputs: [output.main({ description: 'Utility operation result' })],
     defaults: { operation: 'now', format: 'ISO', outputFormat: 'ISO', timezone: 'UTC', unit: 'days', amount: 0 },
   },
   async (nodeInput, context) => {

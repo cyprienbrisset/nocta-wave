@@ -94,14 +94,7 @@ export const ftpNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.string('path', 'Remote path'),
-      output.object('content', 'Downloaded content'),
-      output.array('files', 'Directory listing'),
-      output.boolean('exists', 'File exists'),
-      output.object('stats', 'File statistics'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       protocol: 'sftp',
       operation: 'upload',

@@ -133,16 +133,7 @@ export const rateLimitNode: NodeDefinition = createNode(
         default: 'ratelimit',
       }),
     ],
-    outputs: [
-      output.boolean('allowed', 'Request allowed'),
-      output.boolean('limited', 'Is rate limited'),
-      output.number('remaining', 'Remaining requests'),
-      output.number('limit', 'Total limit'),
-      output.number('reset', 'Reset timestamp'),
-      output.number('retryAfter', 'Retry after (seconds)'),
-      output.object('headers', 'Rate limit headers'),
-      output.object('status', 'Full status info'),
-    ],
+    outputs: [output.main({ description: 'Utility operation result' })],
     defaults: {
       operation: 'check',
       algorithm: 'tokenBucket',

@@ -112,14 +112,7 @@ export const kafkaNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.number('partition', 'Partition'),
-      output.number('offset', 'Message offset'),
-      output.array('messages', 'Consumed messages'),
-      output.array('topics', 'Topic list'),
-      output.object('topicMetadata', 'Topic metadata'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'produce',
       topic: '',

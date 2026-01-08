@@ -424,14 +424,7 @@ export const webflowNode: NodeDefinition = createNode(
         placeholder: 'e.g., 653fd9af6a07fc9cfd7a5e57',
       }),
     ],
-    outputs: [
-      output.object('result', 'API response data'),
-      output.array('items', 'Collection items (for list operations)'),
-      output.object('site', 'Site information'),
-      output.object('collection', 'Collection information'),
-      output.object('item', 'Single item data'),
-      output.number('count', 'Total count of items'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     credentials: ['api_key'],
   },
   async (nodeInput, context) => {

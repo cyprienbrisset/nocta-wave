@@ -154,12 +154,7 @@ export const clickupNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('tasks', 'List of tasks'),
-      output.object('task', 'Single task'),
-      output.string('id', 'Created/updated task ID'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'tasks',
       operation: 'list',

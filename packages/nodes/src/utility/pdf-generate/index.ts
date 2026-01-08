@@ -467,17 +467,7 @@ export const pdfGenerateNode: NodeDefinition = createNode(
         default: false,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Generation success'),
-      output.string('path', 'PDF file path'),
-      output.string('base64', 'PDF as base64'),
-      output.number('pages', 'Number of pages'),
-      output.number('size', 'File size in bytes'),
-      output.array('screenshots', 'Page screenshots'),
-      output.object('metadata', 'PDF metadata'),
-      output.object('outline', 'Document outline'),
-      output.string('html', 'Generated HTML'),
-    ],
+    outputs: [output.main({ description: 'Utility operation result' })],
     defaults: {
       source: 'html',
       templateEngine: 'handlebars',

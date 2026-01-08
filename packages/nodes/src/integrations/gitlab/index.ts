@@ -338,12 +338,7 @@ export const gitlabNode: NodeDefinition = createNode(
       // Group fields
       input.string('groupId', 'Group ID', { description: 'Group ID or path' }),
     ],
-    outputs: [
-      output.object('result', 'GitLab API response'),
-      output.array('items', 'List items (for list operations)'),
-      output.object('pagination', 'Pagination info (total, page, per_page)'),
-      output.object('error', 'Error details if operation failed'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     credentials: ['api_key'],
   },
   async (nodeInput, context) => {

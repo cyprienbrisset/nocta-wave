@@ -141,15 +141,7 @@ export const linearNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('nodes', 'List results'),
-      output.object('node', 'Single item'),
-      output.string('id', 'Created/updated item ID'),
-      output.string('identifier', 'Issue identifier (e.g., ENG-123)'),
-      output.string('endCursor', 'Pagination cursor'),
-      output.boolean('hasNextPage', 'Has more results'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'issues',
       operation: 'list',

@@ -12,10 +12,11 @@ import { RedisService } from '../../database/redis.service';
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
-    credentials: true,
+    origin: '*', // Allow all origins
+    
   },
   namespace: '/executions',
+  transports: ['polling', 'websocket'],
 })
 export class ExecutionGateway
   implements OnGatewayConnection, OnGatewayDisconnect

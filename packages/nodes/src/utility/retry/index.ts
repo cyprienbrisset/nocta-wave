@@ -136,17 +136,7 @@ export const retryNode: NodeDefinition = createNode(
         placeholder: 'error.status >= 500',
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation succeeded'),
-      output.object('result', 'Operation result'),
-      output.number('attempts', 'Total attempts'),
-      output.number('retriesUsed', 'Retries used'),
-      output.array('errors', 'Errors encountered'),
-      output.number('totalTime', 'Total execution time'),
-      output.object('lastError', 'Last error details'),
-      output.boolean('usedFallback', 'Used fallback value'),
-      output.object('circuitStatus', 'Circuit breaker status'),
-    ],
+    outputs: [output.main({ description: 'Utility operation result' })],
     defaults: {
       operation: 'execute',
       maxRetries: 3,

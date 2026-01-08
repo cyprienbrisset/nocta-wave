@@ -171,13 +171,7 @@ export const datadogNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.object('data', 'Response data'),
-      output.array('series', 'Time series data'),
-      output.array('events', 'Events list'),
-      output.array('logs', 'Logs list'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'metrics',
       operation: 'submit',

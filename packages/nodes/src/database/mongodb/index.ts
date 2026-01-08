@@ -33,7 +33,7 @@ export const mongodbNode: NodeDefinition = createNode(
       input.json('pipeline', 'Pipeline', { description: 'Aggregation pipeline' }),
       input.json('options', 'Options', { description: 'Additional options' }),
     ],
-    outputs: [output.array('documents', 'Result documents'), output.number('count', 'Document count')],
+    outputs: [output.main({ description: 'MongoDB operation result' })],
     credentials: ['custom'],
   },
   async (nodeInput, context) => {

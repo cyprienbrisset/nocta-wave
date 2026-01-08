@@ -44,7 +44,7 @@ export const setNode: NodeDefinition = createNode(
         description: 'Remove all fields except the ones being set',
       }),
     ],
-    outputs: [output.object('data', 'Modified data')],
+    outputs: [output.main({ description: 'Operation result' })],
     defaults: {
       mode: 'set',
       keepOnlySet: false,

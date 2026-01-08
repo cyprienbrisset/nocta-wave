@@ -28,7 +28,7 @@ export const mapNode: NodeDefinition = createNode(
         description: 'Key to store the result array',
       }),
     ],
-    outputs: [output.array('items', 'Transformed array')],
+    outputs: [output.main({ description: 'Operation result' })],
     defaults: {
       outputKey: 'items',
     },

@@ -145,13 +145,7 @@ export const gcfNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.object('result', 'Function result'),
-      output.string('executionId', 'Execution ID'),
-      output.array('functions', 'Function list'),
-      output.object('function', 'Function details'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'call',
       location: 'us-central1',

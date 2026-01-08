@@ -67,15 +67,7 @@ export const databaseTrigger: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.string('operation', 'Operation type (INSERT/UPDATE/DELETE)'),
-      output.object('newData', 'New row/document data'),
-      output.object('oldData', 'Previous row/document data (for UPDATE/DELETE)'),
-      output.object('changedFields', 'Fields that changed'),
-      output.string('table', 'Table/collection name'),
-      output.string('primaryKey', 'Primary key value'),
-      output.string('timestamp', 'Change timestamp'),
-    ],
+    outputs: [output.main({ description: 'Trigger event data' })],
     defaults: {
       databaseType: 'postgres',
       table: '',

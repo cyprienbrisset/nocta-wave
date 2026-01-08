@@ -41,7 +41,13 @@
       "Bash(pnpm --filter @ws-flows/api add:*)",
       "Bash(xargs dirname:*)",
       "Bash(ipconfig getifaddr:*)",
-      "Bash(npx prisma validate:*)"
+      "Bash(npx prisma validate:*)",
+      "Bash(npx shadcn@latest add radio-group)",
+      "Bash(pnpm add:*)",
+      "Bash(xargs:*)",
+      "Bash(node:*)",
+      "Bash(__NEW_LINE__ echo \"\")",
+      "Bash(done)"
     ]
   }
 }

@@ -111,13 +111,7 @@ export const kubernetesNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('items', 'Resource list'),
-      output.object('item', 'Single resource'),
-      output.string('logs', 'Container logs'),
-      output.string('output', 'Exec output'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'pods',
       operation: 'list',

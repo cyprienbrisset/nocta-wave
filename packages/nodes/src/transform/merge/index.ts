@@ -33,7 +33,7 @@ export const mergeNode: NodeDefinition = createNode(
         placeholder: 'id',
       }),
     ],
-    outputs: [output.object('data', 'Merged data')],
+    outputs: [output.main({ description: 'Operation result' })],
     defaults: {
       mode: 'merge',
     },

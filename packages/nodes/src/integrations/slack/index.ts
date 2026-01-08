@@ -34,7 +34,7 @@ export const slackNode: NodeDefinition = createNode(
       input.string('messageTs', 'Message TS', { description: 'Message timestamp (for updates)' }),
       input.string('userId', 'User ID', { description: 'Slack user ID' }),
     ],
-    outputs: [output.object('response', 'Slack API response')],
+    outputs: [output.main({ description: 'Operation result' })],
     credentials: ['oauth2', 'api_key'],
   },
   async (nodeInput, context) => {

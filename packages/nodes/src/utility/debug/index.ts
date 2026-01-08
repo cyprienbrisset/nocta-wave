@@ -31,7 +31,7 @@ export const debugNode: NodeDefinition = createNode(
         description: 'List all keys if input is an object',
       }),
     ],
-    outputs: [output.object('output', 'Debug information about the input data')],
+    outputs: [output.main({ description: 'Operation result' })],
     defaults: {
       breakpoint: false,
       showType: true,

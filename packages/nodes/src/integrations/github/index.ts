@@ -43,7 +43,7 @@ export const githubNode: NodeDefinition = createNode(
       input.string('head', 'Head Branch', { description: 'PR head branch' }),
       input.string('base', 'Base Branch', { description: 'PR base branch', default: 'main' }),
     ],
-    outputs: [output.object('result', 'GitHub API response')],
+    outputs: [output.main({ description: 'Operation result' })],
     credentials: ['api_key'],
   },
   async (nodeInput, context) => {

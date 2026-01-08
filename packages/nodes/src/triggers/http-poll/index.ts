@@ -50,7 +50,7 @@ export const httpPollTrigger: NodeDefinition = createNode(
         placeholder: 'data.items',
       }),
     ],
-    outputs: [output.object('data', 'Polled data')],
+    outputs: [output.main({ description: 'Operation result' })],
     credentials: ['api_key', 'basic_auth'],
     defaults: {
       method: 'GET',

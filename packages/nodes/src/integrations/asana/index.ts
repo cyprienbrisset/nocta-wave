@@ -119,13 +119,7 @@ export const asanaNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('items', 'List results'),
-      output.object('item', 'Single item'),
-      output.string('gid', 'Created/updated item GID'),
-      output.string('nextPage', 'Next page offset'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'tasks',
       operation: 'list',

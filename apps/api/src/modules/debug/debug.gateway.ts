@@ -21,9 +21,10 @@ interface DebugClient {
 @WebSocketGateway({
   namespace: '/debug',
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:4000',
-    credentials: true,
+    origin: '*', // Allow all origins for local network access
+    
   },
+  transports: ['polling', 'websocket'],
 })
 export class DebugGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()

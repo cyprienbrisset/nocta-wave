@@ -90,14 +90,7 @@ export const gcsNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.string('url', 'Public URL (if made public)'),
-      output.string('gsUri', 'GCS URI (gs://bucket/path)'),
-      output.object('content', 'Downloaded content'),
-      output.array('files', 'List of files'),
-      output.object('metadata', 'Object metadata'),
-    ],
+    outputs: [output.main({ description: 'GCS operation result' })],
     defaults: {
       operation: 'upload',
       bucket: '',

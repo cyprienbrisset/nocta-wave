@@ -69,12 +69,7 @@ export const httpRequest: NodeDefinition = createNode(
         { default: 'json' }
       ),
     ],
-    outputs: [
-      output.object('response', 'Full HTTP response'),
-      output.number('statusCode', 'HTTP status code'),
-      output.object('headers', 'Response headers'),
-      output.object('body', 'Response body'),
-    ],
+    outputs: [output.main({ description: 'HTTP response with status, headers and body' })],
     credentials: ['api_key', 'oauth2', 'basic_auth'],
     defaults: {
       method: 'GET',

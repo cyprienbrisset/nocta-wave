@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
@@ -25,6 +25,8 @@ import {
   FileText,
   Network,
   Layers,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -50,6 +52,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
 import { monitoringApi, type RealTimeMetrics, type StructuredLog, type TraceSummary, type ActiveAlert } from '@/lib/api/monitoring';
+import { monitoringSocket, type MonitoringMetrics, type LogEntry, type AlertEvent } from '@/lib/socket/monitoring-socket';
 
 // ============================================================================
 // COMPONENTS
@@ -198,19 +201,99 @@ export default function MonitoringPage() {
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [expandedTrace, setExpandedTrace] = useState<string | null>(null);
 
+  // Real-time state from WebSocket
+  const [isSocketConnected, setIsSocketConnected] = useState(false);
+  const [liveMetrics, setLiveMetrics] = useState<MonitoringMetrics | null>(null);
+  const [liveLogs, setLiveLogs] = useState<LogEntry[]>([]);
+  const [liveAlerts, setLiveAlerts] = useState<AlertEvent[]>([]);
+  const maxLiveLogs = 100;
+
   // Get team ID (assuming first team for now)
   const teamId = user?.teamMemberships?.[0]?.team?.id || '';
 
   // ============================================================================
-  // DATA FETCHING
+  // WEBSOCKET CONNECTION
+  // ============================================================================
+
+  useEffect(() => {
+    if (!teamId) return;
+
+    let cleanup: (() => void) | undefined;
+
+    const connectSocket = async () => {
+      try {
+        // Token is sent via HTTP-only cookie
+        await monitoringSocket.connect();
+        setIsSocketConnected(true);
+
+        // Subscribe to team events
+        monitoringSocket.subscribeToTeam(teamId);
+
+        // Listen for metrics updates
+        const unsubMetrics = monitoringSocket.onMetricsUpdate((metrics) => {
+          console.log('[Monitoring] Metrics update:', metrics);
+          setLiveMetrics(metrics);
+        });
+
+        // Listen for new logs
+        const unsubLogs = monitoringSocket.onLogNew((log) => {
+          console.log('[Monitoring] New log:', log);
+          setLiveLogs((prev) => {
+            const newLogs = [log, ...prev];
+            // Keep only the most recent logs
+            return newLogs.slice(0, maxLiveLogs);
+          });
+        });
+
+        // Listen for alerts
+        const unsubAlerts = monitoringSocket.onAlertFired((alert) => {
+          console.log('[Monitoring] Alert fired:', alert);
+          setLiveAlerts((prev) => [alert, ...prev]);
+          // Invalidate alerts query to refresh the list
+          queryClient.invalidateQueries({ queryKey: ['monitoring', 'alerts', teamId] });
+        });
+
+        const unsubGlobalAlerts = monitoringSocket.onGlobalAlert((alert) => {
+          console.log('[Monitoring] Global alert:', alert);
+          setLiveAlerts((prev) => [alert, ...prev]);
+        });
+
+        cleanup = () => {
+          unsubMetrics();
+          unsubLogs();
+          unsubAlerts();
+          unsubGlobalAlerts();
+          monitoringSocket.unsubscribeFromTeam(teamId);
+        };
+      } catch (error) {
+        console.error('[Monitoring] Socket connection failed:', error);
+        setIsSocketConnected(false);
+      }
+    };
+
+    connectSocket();
+
+    return () => {
+      cleanup?.();
+      monitoringSocket.disconnect();
+      setIsSocketConnected(false);
+    };
+  }, [teamId, queryClient]);
+
+  // ============================================================================
+  // DATA FETCHING (with WebSocket fallback)
   // ============================================================================
 
   const { data: realTimeMetrics, isLoading: isLoadingMetrics } = useQuery({
     queryKey: ['monitoring', 'realtime', teamId],
     queryFn: () => monitoringApi.getRealTimeMetrics(teamId),
     enabled: !!teamId,
-    refetchInterval: autoRefresh ? 5000 : false,
+    // Only poll if WebSocket is not connected
+    refetchInterval: autoRefresh && !isSocketConnected ? 5000 : false,
   });
+
+  // Use live metrics from WebSocket if available, otherwise fall back to API
+  const displayMetrics = liveMetrics || realTimeMetrics;
 
   const { data: performanceMetrics } = useQuery({
     queryKey: ['monitoring', 'performance', teamId],
@@ -286,12 +369,35 @@ export default function MonitoringPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* WebSocket connection status */}
+          <div className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium',
+            isSocketConnected
+              ? 'bg-green-500/20 text-green-500'
+              : 'bg-amber-500/20 text-amber-500'
+          )}>
+            {isSocketConnected ? (
+              <>
+                <Wifi className="h-3.5 w-3.5" />
+                <span>Temps réel</span>
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-3.5 w-3.5" />
+                <span>Polling</span>
+              </>
+            )}
+          </div>
           <Button
             variant={autoRefresh ? 'default' : 'outline'}
             size="sm"
             onClick={() => setAutoRefresh(!autoRefresh)}
           >
-            <RefreshCw className={cn('h-4 w-4 mr-2', autoRefresh && 'animate-spin')} />
+            <RefreshCw className={cn('h-4 w-4 mr-2', autoRefresh && !isSocketConnected && 'animate-spin')} />
             {autoRefresh ? 'Auto-refresh ON' : 'Auto-refresh OFF'}
           </Button>
           <Button
@@ -371,37 +477,37 @@ export default function MonitoringPage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <MetricCard
               title="Exécutions totales"
-              value={realTimeMetrics?.totalExecutions || 0}
-              subtitle={`${realTimeMetrics?.executionsPerMinute || 0}/min`}
+              value={displayMetrics?.totalExecutions || 0}
+              subtitle={`${displayMetrics?.executionsPerMinute || 0}/min`}
               icon={Activity}
               trend="up"
               trendValue="+12% vs hier"
             />
             <MetricCard
               title="Taux de succès"
-              value={`${realTimeMetrics?.successRate || 100}%`}
-              subtitle={`${realTimeMetrics?.recentErrors || 0} erreurs récentes`}
+              value={`${displayMetrics?.successRate || 100}%`}
+              subtitle={`${displayMetrics?.recentErrors || 0} erreurs récentes`}
               icon={CheckCircle}
               variant={
-                (realTimeMetrics?.successRate || 100) >= 95
+                (displayMetrics?.successRate || 100) >= 95
                   ? 'success'
-                  : (realTimeMetrics?.successRate || 100) >= 80
+                  : (displayMetrics?.successRate || 100) >= 80
                     ? 'warning'
                     : 'error'
               }
             />
             <MetricCard
               title="Durée moyenne"
-              value={formatDuration(realTimeMetrics?.avgDuration || 0)}
+              value={formatDuration(displayMetrics?.avgDuration || 0)}
               subtitle={`P95: ${formatDuration(performanceMetrics?.p95Duration || 0)}`}
               icon={Timer}
             />
             <MetricCard
               title="File d'attente"
-              value={realTimeMetrics?.queueDepth || 0}
-              subtitle={`${realTimeMetrics?.runningExecutions || 0} en cours`}
+              value={displayMetrics?.queueDepth || 0}
+              subtitle={`${displayMetrics?.runningExecutions || 0} en cours`}
               icon={Layers}
-              variant={(realTimeMetrics?.queueDepth || 0) > 50 ? 'warning' : 'default'}
+              variant={(displayMetrics?.queueDepth || 0) > 50 ? 'warning' : 'default'}
             />
           </div>
 
@@ -544,8 +650,64 @@ export default function MonitoringPage() {
             </div>
           )}
 
-          {/* Logs List */}
+          {/* Live Logs Stream */}
+          {isSocketConnected && liveLogs.length > 0 && (
+            <Card className="border-green-500/30 bg-green-500/5">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-lg">Logs en temps réel</CardTitle>
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setLiveLogs([])}
+                  >
+                    Effacer
+                  </Button>
+                </div>
+                <CardDescription>{liveLogs.length} nouveaux logs</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[200px]">
+                  <div className="divide-y divide-border">
+                    {liveLogs.map((log, index) => (
+                      <div
+                        key={`live-${log.id || index}`}
+                        className="p-3 hover:bg-muted/50 animate-in fade-in slide-in-from-top-2 duration-300"
+                      >
+                        <div className="flex items-start gap-3">
+                          <LogLevelBadge level={log.level} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-mono truncate">{log.message}</p>
+                            <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                              <span>{formatTimestamp(log.timestamp)}</span>
+                              {log.source && (
+                                <>
+                                  <span>•</span>
+                                  <span>{log.source}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Logs List (Historical) */}
           <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg">Historique des logs</CardTitle>
+            </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="h-[500px]">
                 {isLoadingLogs ? (

@@ -132,14 +132,7 @@ export const firebaseNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.object('document', 'Single document'),
-      output.array('documents', 'Document list'),
-      output.string('id', 'Document/User ID'),
-      output.object('user', 'User data'),
-      output.string('url', 'Download URL'),
-    ],
+    outputs: [output.main({ description: 'Database operation result' })],
     defaults: {
       service: 'firestore',
       operation: 'get',

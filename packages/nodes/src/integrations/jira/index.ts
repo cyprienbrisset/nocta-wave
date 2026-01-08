@@ -113,16 +113,7 @@ export const jiraNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('issues', 'List of issues'),
-      output.object('issue', 'Single issue'),
-      output.string('key', 'Issue key'),
-      output.string('id', 'Issue/resource ID'),
-      output.number('total', 'Total results'),
-      output.array('transitions', 'Available transitions'),
-      output.array('comments', 'Issue comments'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'issues',
       operation: 'list',

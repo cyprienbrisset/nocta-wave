@@ -36,7 +36,7 @@ export const cronTrigger: NodeDefinition = createNode(
         { default: 'UTC' }
       ),
     ],
-    outputs: [output.object('data', 'Cron trigger payload')],
+    outputs: [output.main({ description: 'Operation result' })],
     defaults: {
       expression: '0 * * * *',
       timezone: 'UTC',

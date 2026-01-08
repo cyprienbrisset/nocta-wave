@@ -106,14 +106,7 @@ export const pineconeNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('matches', 'Query matches'),
-      output.object('vectors', 'Fetched vectors'),
-      output.number('upsertedCount', 'Number of upserted vectors'),
-      output.object('indexStats', 'Index statistics'),
-      output.array('indexes', 'List of indexes'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'query',
       indexName: '',

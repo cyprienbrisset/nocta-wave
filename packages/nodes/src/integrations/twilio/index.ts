@@ -29,7 +29,7 @@ export const twilioNode: NodeDefinition = createNode(
       input.string('body', 'Message', { description: 'Message body' }),
       input.string('url', 'TwiML URL', { description: 'URL for call instructions' }),
     ],
-    outputs: [output.object('result', 'Twilio API response')],
+    outputs: [output.main({ description: 'Operation result' })],
     credentials: ['custom'],
   },
   async (nodeInput, context) => {

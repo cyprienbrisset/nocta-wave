@@ -147,13 +147,7 @@ export const teamsNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('items', 'List results'),
-      output.object('item', 'Single item'),
-      output.string('id', 'Message/meeting ID'),
-      output.string('webUrl', 'Web URL'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'messages',
       operation: 'send',

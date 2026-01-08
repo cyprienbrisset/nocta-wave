@@ -189,13 +189,63 @@ function GuestEditorContent() {
         // Connect to collaboration socket as guest (non-blocking)
         try {
           await collaborationSocket.connectAsGuest(session.id);
-          setIsConnected(true);
+
+          // Attach listeners BEFORE joining to not miss any events
+          const unsubUserJoined = collaborationSocket.onUserJoined(({ collaborator }) => {
+            console.log('[Guest] User joined:', collaborator);
+            setCollaborators((prev) => {
+              if (prev.find((c) => c.id === collaborator.id)) return prev;
+              return [...prev, collaborator];
+            });
+          });
+
+          const unsubUserLeft = collaborationSocket.onUserLeft(({ collaborator }) => {
+            setCollaborators((prev) => prev.filter((c) => c.id !== collaborator.id));
+          });
+
+          const unsubCursor = collaborationSocket.onCursorUpdated(({ userId, position }) => {
+            console.log('[Guest] Cursor update received:', { userId, position });
+            setCollaborators((prev) => {
+              const exists = prev.find((c) => c.id === userId);
+              if (exists) {
+                return prev.map((c) => (c.id === userId ? { ...c, cursor: position } : c));
+              }
+              // Add unknown collaborator with cursor
+              return [...prev, {
+                id: userId,
+                name: userId.startsWith('guest:') ? 'Guest' : 'User',
+                color: '#6366f1',
+                cursor: position,
+              }];
+            });
+          });
+
+          const unsubGraphUpdate = collaborationSocket.onGraphUpdate(({ nodes: newNodes, edges: newEdges }) => {
+            console.log('[Guest] Graph update received:', { nodes: newNodes.length, edges: newEdges.length });
+            isReceivingUpdateRef.current = true;
+            setNodes(newNodes as Node[]);
+            setEdges(newEdges as Edge[]);
+            setTimeout(() => {
+              isReceivingUpdateRef.current = false;
+            }, 150);
+          });
 
           // Join the workflow room
           const joinResult = await collaborationSocket.joinWorkflow(session.workflowId);
+          console.log('[Guest] Join result:', joinResult);
           if (joinResult?.collaborators) {
             setCollaborators(joinResult.collaborators);
           }
+
+          setIsConnected(true);
+
+          // Store cleanup functions
+          (window as any).__collabCleanup = () => {
+            unsubUserJoined();
+            unsubUserLeft();
+            unsubCursor();
+            unsubGraphUpdate();
+          };
         } catch (socketErr) {
           console.warn('Failed to connect to collaboration socket:', socketErr);
           // Continue without real-time collaboration
@@ -210,54 +260,14 @@ function GuestEditorContent() {
     loadData();
 
     return () => {
+      // Cleanup listeners
+      if ((window as any).__collabCleanup) {
+        (window as any).__collabCleanup();
+        delete (window as any).__collabCleanup;
+      }
       collaborationSocket.disconnect();
     };
   }, [token, router]);
-
-  // Socket event listeners
-  useEffect(() => {
-    if (!isConnected || !guestSession) return;
-
-    const unsubUserJoined = collaborationSocket.onUserJoined(({ collaborator }) => {
-      setCollaborators((prev) => {
-        if (prev.find((c) => c.id === collaborator.id)) return prev;
-        return [...prev, collaborator];
-      });
-    });
-
-    const unsubUserLeft = collaborationSocket.onUserLeft(({ collaborator }) => {
-      setCollaborators((prev) => prev.filter((c) => c.id !== collaborator.id));
-    });
-
-    const unsubPresence = collaborationSocket.onPresenceUpdate(({ collaborators: updated }) => {
-      setCollaborators(updated);
-    });
-
-    const unsubCursor = collaborationSocket.onCursorUpdated(({ userId, position }) => {
-      setCollaborators((prev) =>
-        prev.map((c) => (c.id === userId ? { ...c, cursor: position } : c))
-      );
-    });
-
-    // Listen for graph updates from other collaborators
-    const unsubGraphUpdate = collaborationSocket.onGraphUpdate(({ nodes: newNodes, edges: newEdges }) => {
-      console.log('[Guest] Received graph update:', { nodes: newNodes.length, edges: newEdges.length });
-      isReceivingUpdateRef.current = true;
-      setNodes(newNodes as Node[]);
-      setEdges(newEdges as Edge[]);
-      setTimeout(() => {
-        isReceivingUpdateRef.current = false;
-      }, 150);
-    });
-
-    return () => {
-      unsubUserJoined();
-      unsubUserLeft();
-      unsubPresence();
-      unsubCursor();
-      unsubGraphUpdate();
-    };
-  }, [isConnected, guestSession]);
 
   const handleLeave = useCallback(() => {
     collaborationSocket.disconnect();
@@ -813,11 +823,15 @@ function GuestEditorContent() {
               )}
 
               {/* Collaborator cursors */}
-              {isConnected && (
+              {isConnected && (() => {
+                const cursorsToShow = collaborators
+                  .filter((c) => c.cursor && c.id !== `guest:${guestSession.id}`);
+                console.log('[Guest] Collaborators:', collaborators);
+                console.log('[Guest] Cursors to show:', cursorsToShow);
+                return (
                 <CollaboratorCursors
-                  currentUserId={guestSession.id}
-                  externalCursors={collaborators
-                    .filter((c) => c.cursor && c.id !== guestSession.id)
+                  currentUserId={`guest:${guestSession.id}`}
+                  externalCursors={cursorsToShow
                     .map((c) => ({
                       userId: c.id,
                       name: c.name,
@@ -825,7 +839,8 @@ function GuestEditorContent() {
                       position: c.cursor!,
                     }))}
                 />
-              )}
+                );
+              })()}
             </ReactFlow>
           </div>
 

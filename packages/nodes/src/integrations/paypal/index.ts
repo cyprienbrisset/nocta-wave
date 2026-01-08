@@ -169,14 +169,7 @@ export const paypalNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.string('id', 'Resource ID'),
-      output.string('status', 'Status'),
-      output.object('order', 'Order details'),
-      output.object('subscription', 'Subscription details'),
-      output.array('links', 'HATEOAS links'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'orders',
       operation: 'create',

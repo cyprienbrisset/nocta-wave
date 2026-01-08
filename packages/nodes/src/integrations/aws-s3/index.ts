@@ -34,7 +34,7 @@ export const awsS3Node: NodeDefinition = createNode(
       input.string('contentType', 'Content Type', { default: 'application/octet-stream' }),
       input.number('expiresIn', 'Expires In', { default: 3600, description: 'Signed URL expiry (seconds)' }),
     ],
-    outputs: [output.object('result', 'S3 response'), output.array('files', 'File list')],
+    outputs: [output.main({ description: 'S3 operation result' })],
     credentials: ['custom'],
   },
   async (nodeInput, context) => {

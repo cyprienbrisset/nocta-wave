@@ -93,8 +93,6 @@ export function SourceSchemaTree({
             </div>
           ) : (
             <div className="space-y-0.5">
-              {/* Root output wrapper */}
-              <div className="text-xs text-gray-500 px-2 py-1 font-mono">output</div>
               {outputFields.map((field) => (
                 <FieldNode
                   key={field.path}

@@ -127,13 +127,7 @@ export const segmentNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.object('response', 'API response'),
-      output.string('messageId', 'Message ID'),
-      output.object('profile', 'User profile'),
-      output.array('events', 'User events'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'track',
       properties: {},

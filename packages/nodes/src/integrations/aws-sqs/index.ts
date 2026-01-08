@@ -91,13 +91,7 @@ export const awsSqsNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.string('messageId', 'Message ID'),
-      output.array('messages', 'Received messages'),
-      output.object('attributes', 'Queue attributes'),
-      output.string('sequenceNumber', 'FIFO sequence number'),
-    ],
+    outputs: [output.main({ description: 'SQS operation result' })],
     defaults: {
       operation: 'sendMessage',
       queueUrl: '',

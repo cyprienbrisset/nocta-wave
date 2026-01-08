@@ -69,15 +69,7 @@ export const queueTrigger: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.object('message', 'Message content'),
-      output.string('messageId', 'Message ID'),
-      output.object('headers', 'Message headers/attributes'),
-      output.string('queueName', 'Source queue name'),
-      output.number('deliveryAttempt', 'Current delivery attempt'),
-      output.string('timestamp', 'Message timestamp'),
-      output.object('metadata', 'Queue-specific metadata'),
-    ],
+    outputs: [output.main({ description: 'Trigger event data' })],
     defaults: {
       queueType: 'rabbitmq',
       queueName: '',

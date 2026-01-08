@@ -162,14 +162,7 @@ export const awsLambdaNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.object('response', 'Function response'),
-      output.string('functionArn', 'Function ARN'),
-      output.number('statusCode', 'Status code'),
-      output.string('logResult', 'Execution logs'),
-      output.array('functions', 'Function list'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'invoke',
       invocationType: 'RequestResponse',

@@ -34,7 +34,7 @@ export const jsonParseNode: NodeDefinition = createNode(
         description: 'Format JSON with indentation (stringify only)',
       }),
     ],
-    outputs: [output.object('output', 'Parsed or stringified result')],
+    outputs: [output.main({ description: 'Operation result' })],
     defaults: {
       mode: 'parse',
       pretty: false,

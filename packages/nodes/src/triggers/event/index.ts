@@ -39,13 +39,7 @@ export const eventTrigger: NodeDefinition = createNode(
         max: 60000,
       }),
     ],
-    outputs: [
-      output.string('eventType', 'Event type'),
-      output.string('eventId', 'Event ID'),
-      output.object('payload', 'Event payload'),
-      output.object('metadata', 'Event metadata'),
-      output.string('timestamp', 'Event timestamp'),
-    ],
+    outputs: [output.main({ description: 'Event data with type, payload and metadata' })],
     defaults: {
       eventType: '',
       eventSource: '',

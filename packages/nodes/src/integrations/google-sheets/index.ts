@@ -30,7 +30,7 @@ export const googleSheetsNode: NodeDefinition = createNode(
       input.json('values', 'Values', { description: '2D array of values' }),
       input.string('title', 'Title', { description: 'Spreadsheet title (for create)' }),
     ],
-    outputs: [output.array('values', 'Sheet data'), output.object('spreadsheet', 'Spreadsheet info')],
+    outputs: [output.main({ description: 'Google Sheets operation result' })],
     credentials: ['oauth2'],
   },
   async (nodeInput, context) => {

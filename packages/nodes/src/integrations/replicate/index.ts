@@ -67,14 +67,7 @@ export const replicateNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.unknown('output', 'Model output'),
-      output.string('predictionId', 'Prediction ID'),
-      output.string('status', 'Prediction status'),
-      output.array('logs', 'Prediction logs'),
-      output.object('metrics', 'Prediction metrics'),
-      output.object('model', 'Model information'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'run',
       input: {},

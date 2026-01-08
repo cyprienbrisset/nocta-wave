@@ -98,13 +98,7 @@ export const clickhouseNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('rows', 'Query results'),
-      output.number('rowsRead', 'Rows read'),
-      output.number('rowsWritten', 'Rows written'),
-      output.object('statistics', 'Query statistics'),
-    ],
+    outputs: [output.main({ description: 'Database operation result' })],
     defaults: {
       operation: 'query',
       format: 'JSON',

@@ -37,7 +37,7 @@ export const stripeNode: NodeDefinition = createNode(
       input.string('description', 'Description', {}),
       input.json('metadata', 'Metadata', {}),
     ],
-    outputs: [output.object('result', 'Stripe API response')],
+    outputs: [output.main({ description: 'Operation result' })],
     credentials: ['api_key'],
   },
   async (nodeInput, context) => {

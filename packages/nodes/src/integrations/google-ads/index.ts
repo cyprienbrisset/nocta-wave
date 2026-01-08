@@ -181,14 +181,7 @@ export const googleAdsNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('items', 'List results'),
-      output.object('item', 'Single item'),
-      output.string('resourceName', 'Resource name'),
-      output.array('rows', 'Report rows'),
-      output.string('nextPageToken', 'Next page token'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'campaigns',
       operation: 'list',

@@ -42,7 +42,7 @@ export const gmailNode: NodeDefinition = createNode(
       input.string('threadId', 'Thread ID', { description: 'Email thread ID' }),
       input.number('maxResults', 'Max Results', { default: 10 }),
     ],
-    outputs: [output.object('result', 'Gmail API response')],
+    outputs: [output.main({ description: 'Operation result' })],
     credentials: ['oauth2'],
   },
   async (nodeInput, context) => {

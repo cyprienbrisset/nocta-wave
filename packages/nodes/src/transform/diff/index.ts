@@ -112,17 +112,7 @@ export const diffNode: NodeDefinition = createNode(
         default: 'new',
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.boolean('identical', 'Contents are identical'),
-      output.string('diff', 'Diff output'),
-      output.string('patch', 'Patch string'),
-      output.string('merged', 'Merged content'),
-      output.array('changes', 'List of changes'),
-      output.object('stats', 'Diff statistics'),
-      output.boolean('hasConflicts', 'Has merge conflicts'),
-      output.array('conflicts', 'Conflict details'),
-    ],
+    outputs: [output.main({ description: 'Transformation result' })],
     defaults: {
       operation: 'compare',
       format: 'unified',

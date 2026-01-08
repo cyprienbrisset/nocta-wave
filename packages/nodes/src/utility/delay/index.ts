@@ -23,7 +23,7 @@ export const delayNode: NodeDefinition = createNode(
         { label: 'Hours', value: 'h' },
       ], { default: 's' }),
     ],
-    outputs: [output.object('data', 'Input data passed through')],
+    outputs: [output.main({ description: 'Operation result' })],
     defaults: { duration: 1, unit: 's' },
   },
   async (nodeInput, context) => {

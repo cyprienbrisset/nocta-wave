@@ -125,14 +125,7 @@ export const terraformNode: NodeDefinition = createNode(
         required: false,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.string('output', 'Command output'),
-      output.object('plan', 'Plan details'),
-      output.object('outputs', 'Terraform outputs'),
-      output.object('state', 'State information'),
-      output.number('changes', 'Number of changes'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'plan',
       autoApprove: false,

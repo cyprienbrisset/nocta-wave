@@ -129,15 +129,7 @@ export const plaidNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('accounts', 'Bank accounts'),
-      output.array('transactions', 'Transactions'),
-      output.object('balance', 'Account balances'),
-      output.object('identity', 'Account holder identity'),
-      output.string('linkToken', 'Link token'),
-      output.string('accessToken', 'Access token'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'accounts',
       operation: 'get',

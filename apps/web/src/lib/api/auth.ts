@@ -12,10 +12,8 @@ export interface RegisterRequest {
 }
 
 export interface AuthResponse {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
   message: string;
+  expiresIn: number;
 }
 
 export interface User {
@@ -38,39 +36,23 @@ export interface User {
 
 export const authApi = {
   async login(data: LoginRequest): Promise<AuthResponse> {
-    const response = await api.post<AuthResponse>('/auth/login', data);
-    api.setToken(response.accessToken);
-    localStorage.setItem('refreshToken', response.refreshToken);
-    return response;
+    // Tokens are set as HTTP-only cookies by the server
+    return api.post<AuthResponse>('/auth/login', data);
   },
 
   async register(data: RegisterRequest): Promise<AuthResponse> {
-    const response = await api.post<AuthResponse>('/auth/register', data);
-    api.setToken(response.accessToken);
-    localStorage.setItem('refreshToken', response.refreshToken);
-    return response;
+    // Tokens are set as HTTP-only cookies by the server
+    return api.post<AuthResponse>('/auth/register', data);
   },
 
   async logout(): Promise<void> {
-    const refreshToken = localStorage.getItem('refreshToken');
-    if (refreshToken) {
-      await api.post('/auth/logout', { refreshToken });
-    }
-    api.setToken(null);
-    localStorage.removeItem('refreshToken');
+    // Server will clear cookies
+    await api.post('/auth/logout', {});
   },
 
   async refreshToken(): Promise<AuthResponse> {
-    const refreshToken = localStorage.getItem('refreshToken');
-    if (!refreshToken) {
-      throw new Error('No refresh token');
-    }
-    const response = await api.post<AuthResponse>('/auth/refresh', {
-      refreshToken,
-    });
-    api.setToken(response.accessToken);
-    localStorage.setItem('refreshToken', response.refreshToken);
-    return response;
+    // Refresh token is sent via HTTP-only cookie
+    return api.post<AuthResponse>('/auth/refresh', {});
   },
 
   async getMe(): Promise<User> {

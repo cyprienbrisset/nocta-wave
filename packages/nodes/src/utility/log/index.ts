@@ -35,7 +35,7 @@ export const logNode: NodeDefinition = createNode(
         description: 'Include input data in log output',
       }),
     ],
-    outputs: [output.object('output', 'Passes through input data unchanged')],
+    outputs: [output.main({ description: 'Operation result' })],
     defaults: {
       level: 'info',
       includeData: true,

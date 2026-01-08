@@ -33,7 +33,7 @@ export const waitNode: NodeDefinition = createNode(
         { default: 'ms' }
       ),
     ],
-    outputs: [output.object('data', 'Input data passed through')],
+    outputs: [output.main({ description: 'Operation result' })],
     defaults: {
       duration: 1000,
       unit: 'ms',

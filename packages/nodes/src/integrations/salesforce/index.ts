@@ -86,14 +86,7 @@ export const salesforceNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('records', 'Query/search results'),
-      output.object('record', 'Single record'),
-      output.string('id', 'Created/updated record ID'),
-      output.number('totalSize', 'Total records found'),
-      output.object('metadata', 'Object metadata'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'query',
       objectType: 'Account',

@@ -33,7 +33,7 @@ export const sendgridNode: NodeDefinition = createNode(
       input.string('templateId', 'Template ID', {}),
       input.json('dynamicData', 'Dynamic Data', { description: 'Template variables' }),
     ],
-    outputs: [output.object('result', 'SendGrid response')],
+    outputs: [output.main({ description: 'Operation result' })],
     credentials: ['api_key'],
   },
   async (nodeInput, context) => {

@@ -47,7 +47,7 @@ interface CollaborationState {
   followers: string[];
 
   // Actions
-  connect: (token: string) => Promise<void>;
+  connect: () => Promise<void>;
   disconnect: () => void;
   joinWorkflow: (workflowId: string) => Promise<void>;
   leaveWorkflow: () => Promise<void>;
@@ -149,12 +149,12 @@ export const useCollaborationStore = create<CollaborationState>()(
       followingUserId: null,
       followers: [],
 
-      // Connect to server
-      connect: async (token: string) => {
+      // Connect to server (token is sent via HTTP-only cookie)
+      connect: async () => {
         set({ isConnecting: true, connectionError: null });
 
         try {
-          await collaborationSocket.connect(token);
+          await collaborationSocket.connect();
 
           // Set up event listeners
           collaborationSocket.onUserJoined(({ workflowId, collaborator }) => {

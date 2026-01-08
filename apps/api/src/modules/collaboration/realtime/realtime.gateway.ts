@@ -39,10 +39,11 @@ import { CollaborationLinkService } from '../collaboration-link.service';
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
-    credentials: true,
+    origin: true, // Allow all origins dynamically
+    credentials: true, // Allow cookies
   },
   namespace: '/collaboration',
+  transports: ['websocket', 'polling'],
 })
 export class RealtimeGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit
@@ -150,11 +151,31 @@ export class RealtimeGateway
   }
 
   /**
+   * Extract JWT token from cookie or handshake auth
+   */
+  private extractToken(client: Socket): string | null {
+    // Try to get from cookie first (HTTP-only cookies)
+    const cookies = client.handshake.headers?.cookie;
+    if (cookies) {
+      const match = cookies.match(/accessToken=([^;]+)/);
+      if (match) {
+        return match[1];
+      }
+    }
+
+    // Fall back to auth handshake or Authorization header (for backwards compatibility)
+    return (
+      client.handshake.auth?.token ||
+      client.handshake.headers?.authorization?.replace('Bearer ', '') ||
+      null
+    );
+  }
+
+  /**
    * Handle socket connection - supports both JWT auth and guest tokens
    */
   async handleConnection(client: Socket) {
-    const token = client.handshake.auth?.token ||
-      client.handshake.headers?.authorization?.replace('Bearer ', '');
+    const token = this.extractToken(client);
     const guestSessionId = client.handshake.auth?.guestSessionId;
 
     // Guest connection
@@ -361,13 +382,16 @@ export class RealtimeGateway
       workflows.add(data.workflowId);
       this.socketWorkflows.set(client.id, workflows);
 
+      // Log rooms for debugging
+      this.logger.log(`${info.isGuest ? 'Guest' : 'User'} "${info.name}" joined room ${room}. Client rooms: ${Array.from(client.rooms).join(', ')}`);
+
       // Notify others in the room
       client.to(room).emit('user:joined', {
         workflowId: data.workflowId,
         collaborator,
       });
 
-      this.logger.log(`${info.isGuest ? 'Guest' : 'User'} "${info.name}" joined workflow ${data.workflowId}`);
+      this.logger.log(`Notified room ${room} of new user. Existing collaborators: ${existingCollaborators.length}`);
 
       return {
         success: true,
@@ -454,11 +478,16 @@ export class RealtimeGateway
       );
     }
 
-    // Broadcast to others
+    // Broadcast to others in the room
     const room = `workflow:${data.workflowId}`;
+    const userId = authClient.guest ? `guest:${info.id}` : info.id;
+
+    // Log for debugging
+    this.logger.debug(`Broadcasting cursor from ${userId} to room ${room}`);
+
     client.to(room).emit('cursor:updated', {
       workflowId: data.workflowId,
-      userId: authClient.guest ? `guest:${info.id}` : info.id,
+      userId,
       position: data.position,
     });
   }

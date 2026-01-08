@@ -32,7 +32,7 @@ export const errorNode: NodeDefinition = createNode(
         description: 'If true, logs error but continues execution',
       }),
     ],
-    outputs: [output.object('output', 'Error information (if continueOnError is true)')],
+    outputs: [output.main({ description: 'Operation result' })],
     defaults: {
       continueOnError: false,
     },

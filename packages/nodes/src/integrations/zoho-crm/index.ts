@@ -104,14 +104,7 @@ export const zohoCrmNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('records', 'List of records'),
-      output.object('record', 'Single record'),
-      output.string('id', 'Created/updated record ID'),
-      output.boolean('moreRecords', 'More records available'),
-      output.object('info', 'Pagination info'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       module: 'Leads',
       operation: 'list',

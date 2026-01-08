@@ -18,7 +18,7 @@ export const rssNode: NodeDefinition = createNode(
       input.string('feedUrl', 'Feed URL', { required: true, placeholder: 'https://example.com/feed.xml' }),
       input.number('maxItems', 'Max Items', { default: 10 }),
     ],
-    outputs: [output.array('items', 'Feed items'), output.object('feed', 'Feed metadata')],
+    outputs: [output.main({ description: 'RSS feed data' })],
   },
   async (nodeInput, context) => {
     const { logger } = context;

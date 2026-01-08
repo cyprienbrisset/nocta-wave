@@ -22,9 +22,10 @@ class CollaborationSocket {
 
   /**
    * Connect to the collaboration namespace as an authenticated user
+   * Token is sent via HTTP-only cookie
    */
-  connect(token: string): Promise<void> {
-    return this.connectWithAuth({ token });
+  connect(): Promise<void> {
+    return this.connectWithAuth({});
   }
 
   /**
@@ -38,7 +39,7 @@ class CollaborationSocket {
   /**
    * Internal connection method
    */
-  private connectWithAuth(auth: { token?: string; guestSessionId?: string }): Promise<void> {
+  private connectWithAuth(auth: { guestSessionId?: string }): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.socket?.connected) {
         resolve();
@@ -51,34 +52,70 @@ class CollaborationSocket {
         this.socket = null;
       }
 
-      // Remove /api suffix if present since socket namespace is at root
-      // Use window location as fallback for client-side
-      let apiUrl = process.env.NEXT_PUBLIC_API_URL ||
-        (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:4001` : 'http://localhost:4001');
-      apiUrl = apiUrl.replace(/\/api$/, '');
+      // Build WebSocket URL
+      // Smart detection: if env points to localhost but user accesses via different IP, use that IP
+      let wsUrl: string;
+      const isClientSide = typeof window !== 'undefined';
+      const clientHostname = isClientSide ? window.location.hostname : 'localhost';
+      const isAccessingViaIP = clientHostname !== 'localhost' && clientHostname !== '127.0.0.1';
 
-      console.log('[Collaboration] Connecting to:', `${apiUrl}/collaboration`);
+      if (process.env.NEXT_PUBLIC_WS_URL) {
+        wsUrl = process.env.NEXT_PUBLIC_WS_URL;
+        // If env points to localhost but we're accessing via IP, replace localhost with client IP
+        if (isAccessingViaIP && (wsUrl.includes('localhost') || wsUrl.includes('127.0.0.1'))) {
+          wsUrl = wsUrl.replace(/localhost|127\.0\.0\.1/, clientHostname);
+        }
+      } else if (process.env.NEXT_PUBLIC_API_URL) {
+        wsUrl = process.env.NEXT_PUBLIC_API_URL.replace(/\/api$/, '');
+        if (isAccessingViaIP && (wsUrl.includes('localhost') || wsUrl.includes('127.0.0.1'))) {
+          wsUrl = wsUrl.replace(/localhost|127\.0\.0\.1/, clientHostname);
+        }
+      } else if (isClientSide) {
+        wsUrl = `${window.location.protocol}//${clientHostname}:4001`;
+      } else {
+        wsUrl = 'http://localhost:4001';
+      }
+
+      // Ensure we use http:// for socket.io (it handles upgrade to ws internally)
+      wsUrl = wsUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://');
+      // Remove trailing slashes
+      wsUrl = wsUrl.replace(/\/+$/, '');
+
+      console.log('[Collaboration] Connecting to:', `${wsUrl}/collaboration`);
+      console.log('[Collaboration] Client hostname:', clientHostname);
+      console.log('[Collaboration] Auth:', auth.guestSessionId ? 'Guest session' : 'HTTP-only cookie');
 
       let resolved = false;
 
-      // Timeout for connection
+      // Timeout for connection - increased for slower networks
       const timeout = setTimeout(() => {
         if (!resolved) {
           resolved = true;
-          console.error('[Collaboration] Connection timeout');
+          console.error('[Collaboration] Connection timeout to:', `${wsUrl}/collaboration`);
+          console.error('[Collaboration] Please verify the API server is running and accessible at', wsUrl);
           reject(new Error('Connection timeout'));
         }
-      }, 10000);
+      }, 15000);
 
-      this.socket = io(`${apiUrl}/collaboration`, {
+      this.socket = io(`${wsUrl}/collaboration`, {
         auth,
-        transports: ['websocket', 'polling'],
-        reconnection: true,
-        reconnectionAttempts: this.maxReconnectAttempts,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        timeout: 10000,
+        transports: ['websocket', 'polling'], // Try WebSocket first, fall back to polling
+        reconnection: false, // Disable auto-reconnect during initial connection
+        timeout: 20000, // Increase timeout for slower networks
+        forceNew: true, // Force new connection
+        withCredentials: true, // Send cookies for HTTP-only JWT authentication
       }) as AnySocket;
+
+      // Debug: log transport events
+      this.socket.io.on('open', () => {
+        console.log('[Collaboration] Transport opened, type:', this.socket?.io.engine?.transport?.name);
+      });
+      this.socket.io.on('error', (err: Error) => {
+        console.error('[Collaboration] Transport error:', err);
+      });
+      this.socket.io.on('packet', (packet: unknown) => {
+        console.log('[Collaboration] Packet received:', packet);
+      });
 
       this.socket.on('connect', () => {
         if (resolved) return;
@@ -86,6 +123,13 @@ class CollaborationSocket {
         clearTimeout(timeout);
         console.log('[Collaboration] Connected');
         this.reconnectAttempts = 0;
+
+        // Enable reconnection after successful initial connect
+        this.socket!.io.opts.reconnection = true;
+        this.socket!.io.opts.reconnectionAttempts = this.maxReconnectAttempts;
+        this.socket!.io.opts.reconnectionDelay = 1000;
+        this.socket!.io.opts.reconnectionDelayMax = 5000;
+
         resolve();
       });
 
@@ -94,12 +138,16 @@ class CollaborationSocket {
       });
 
       this.socket.on('connect_error', (error) => {
-        console.error('[Collaboration] Connection error:', error.message);
         this.reconnectAttempts++;
+        console.error('[Collaboration] Connection error:', error.message, `(attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+
         if (!resolved && this.reconnectAttempts >= this.maxReconnectAttempts) {
           resolved = true;
           clearTimeout(timeout);
-          reject(new Error(`Failed to connect: ${error.message}`));
+          // Clean up socket to prevent further attempts
+          this.socket?.disconnect();
+          this.socket = null;
+          reject(new Error(`Failed to connect after ${this.maxReconnectAttempts} attempts: ${error.message}`));
         }
       });
 

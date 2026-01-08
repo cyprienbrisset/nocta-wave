@@ -40,7 +40,7 @@ export const cryptoNode: NodeDefinition = createNode(
       ], { default: 'hex' }),
       input.number('length', 'Length', { default: 32, description: 'Random bytes length' }),
     ],
-    outputs: [output.string('result', 'Crypto operation result')],
+    outputs: [output.main({ description: 'Operation result' })],
     defaults: { operation: 'hash', algorithm: 'sha256', encoding: 'hex', length: 32 },
   },
   async (nodeInput, context) => {

@@ -47,7 +47,7 @@ export const sortNode: NodeDefinition = createNode(
         default: 'items',
       }),
     ],
-    outputs: [output.array('items', 'Sorted array')],
+    outputs: [output.main({ description: 'Operation result' })],
     defaults: {
       order: 'asc',
       type: 'string',

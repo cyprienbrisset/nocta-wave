@@ -379,6 +379,7 @@ export class CollaborationLinkService {
 
   /**
    * Update guest session with socket info
+   * Note: cursorX, cursorY, viewportX, viewportY, viewportZoom are stored in Redis, not in DB
    */
   async updateGuestSession(
     sessionId: string,
@@ -392,12 +393,15 @@ export class CollaborationLinkService {
       isActive?: boolean;
     },
   ) {
+    // Filter out cursor/viewport fields - these are stored in Redis, not in DB
+    const { cursorX, cursorY, viewportX, viewportY, viewportZoom, ...dbData } = data;
+
     return this.prisma.guestSession.update({
       where: { id: sessionId },
       data: {
-        ...data,
+        ...dbData,
         lastHeartbeat: new Date(),
-        disconnectedAt: data.isActive === false ? new Date() : undefined,
+        disconnectedAt: dbData.isActive === false ? new Date() : undefined,
       },
     });
   }

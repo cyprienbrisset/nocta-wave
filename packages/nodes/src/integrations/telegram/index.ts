@@ -170,12 +170,7 @@ export const telegramNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.object('result', 'API response'),
-      output.number('messageId', 'Sent message ID'),
-      output.array('updates', 'Updates list'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'sendMessage',
       disableNotification: false,

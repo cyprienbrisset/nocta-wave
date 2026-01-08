@@ -120,13 +120,7 @@ export const validateNode: NodeDefinition = createNode(
         placeholder: 'US',
       }),
     ],
-    outputs: [
-      output.boolean('valid', 'Validation result'),
-      output.array('errors', 'Validation errors'),
-      output.object('validated', 'Validated/sanitized data'),
-      output.object('details', 'Detailed validation info'),
-      output.number('errorCount', 'Number of errors'),
-    ],
+    outputs: [output.main({ description: 'Utility operation result' })],
     defaults: {
       mode: 'format',
       formatType: 'email',

@@ -39,11 +39,7 @@ export const openaiNode: NodeDefinition = createNode(
       input.number('temperature', 'Temperature', { default: 0.7 }),
       input.string('imagePrompt', 'Image Prompt', { description: 'Prompt for image generation' }),
     ],
-    outputs: [
-      output.string('content', 'Generated content'),
-      output.object('response', 'Full API response'),
-      output.array('embedding', 'Embedding vector'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     credentials: ['api_key'],
   },
   async (nodeInput, context) => {

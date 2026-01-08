@@ -21,7 +21,7 @@ export const manualTrigger: NodeDefinition = createNode(
         placeholder: '{ "key": "value" }',
       }),
     ],
-    outputs: [output.object('data', 'Trigger payload data')],
+    outputs: [output.main({ description: 'Operation result' })],
   },
   async (nodeInput, context) => {
     const { logger } = context;

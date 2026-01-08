@@ -201,13 +201,7 @@ export const mqttNode: NodeDefinition = createNode(
         showWhen: { field: 'operation', equals: 'request' },
       }),
     ],
-    outputs: [
-      output.boolean('connected', 'Connection status'),
-      output.object('result', 'Operation result'),
-      output.array('messages', 'Received messages (for subscribe)'),
-      output.object('response', 'Response message (for request-response)'),
-      output.object('error', 'Error details if operation failed'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     credentials: ['api_key'],
   },
   async (nodeInput, context) => {

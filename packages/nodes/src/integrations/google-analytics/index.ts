@@ -129,14 +129,7 @@ export const googleAnalyticsNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('rows', 'Report rows'),
-      output.object('metadata', 'Report metadata'),
-      output.number('rowCount', 'Total row count'),
-      output.array('dimensionHeaders', 'Dimension headers'),
-      output.array('metricHeaders', 'Metric headers'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'reports',
       operation: 'runReport',

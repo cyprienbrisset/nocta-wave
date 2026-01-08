@@ -69,13 +69,7 @@ export const sqliteNode: NodeDefinition = createNode(
         placeholder: '/path/to/backup.db',
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('rows', 'Query results'),
-      output.object('row', 'Single row'),
-      output.number('changes', 'Rows affected'),
-      output.number('lastInsertRowid', 'Last inserted row ID'),
-    ],
+    outputs: [output.main({ description: 'Database operation result' })],
     defaults: {
       operation: 'query',
       mode: 'readwrite',

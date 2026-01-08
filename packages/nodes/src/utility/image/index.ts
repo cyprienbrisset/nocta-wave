@@ -174,16 +174,7 @@ export const imageNode: NodeDefinition = createNode(
         description: 'Blur radius',
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.string('path', 'Output file path'),
-      output.string('base64', 'Output as base64'),
-      output.number('width', 'Output width'),
-      output.number('height', 'Output height'),
-      output.string('format', 'Output format'),
-      output.number('size', 'File size'),
-      output.object('metadata', 'Image metadata'),
-    ],
+    outputs: [output.main({ description: 'Utility operation result' })],
     defaults: {
       operation: 'resize',
       source: 'file',

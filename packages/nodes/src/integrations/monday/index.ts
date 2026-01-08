@@ -106,12 +106,7 @@ export const mondayNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('items', 'List results'),
-      output.object('item', 'Single item'),
-      output.number('id', 'Created/updated item ID'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'items',
       operation: 'list',

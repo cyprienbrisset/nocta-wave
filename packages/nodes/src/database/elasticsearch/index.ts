@@ -121,14 +121,7 @@ export const elasticsearchNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('hits', 'Search results'),
-      output.object('document', 'Single document'),
-      output.number('total', 'Total hits'),
-      output.object('aggregations', 'Aggregation results'),
-      output.string('scrollId', 'Scroll ID for pagination'),
-    ],
+    outputs: [output.main({ description: 'Elasticsearch operation result' })],
     defaults: {
       operation: 'search',
       query: { match_all: {} },

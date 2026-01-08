@@ -106,15 +106,7 @@ export const pdfParseNode: NodeDefinition = createNode(
         default: false,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Parse success'),
-      output.string('text', 'Extracted text'),
-      output.array('pages', 'Page contents'),
-      output.array('images', 'Extracted images'),
-      output.array('tables', 'Extracted tables'),
-      output.object('metadata', 'Document metadata'),
-      output.number('pageCount', 'Number of pages'),
-    ],
+    outputs: [output.main({ description: 'Utility operation result' })],
     defaults: {
       source: 'file',
       extractText: true,

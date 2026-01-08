@@ -55,11 +55,7 @@ export const webhookTrigger: NodeDefinition = createNode(
         { default: 'onReceived', description: 'When to send the response' }
       ),
     ],
-    outputs: [
-      output.object('body', 'Request body'),
-      output.object('headers', 'Request headers'),
-      output.object('query', 'Query parameters'),
-    ],
+    outputs: [output.main({ description: 'Trigger event data' })],
     defaults: {
       method: 'POST',
       authentication: 'none',

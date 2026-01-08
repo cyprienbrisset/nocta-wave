@@ -228,14 +228,7 @@ export const woocommerceNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('items', 'List results'),
-      output.object('item', 'Single item'),
-      output.number('id', 'Created/updated item ID'),
-      output.number('total', 'Total items'),
-      output.number('totalPages', 'Total pages'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'products',
       operation: 'list',

@@ -352,12 +352,7 @@ export const bitbucketNode: NodeDefinition = createNode(
       input.string('sort', 'Sort', { description: 'Sort field' }),
       input.string('fields', 'Fields', { description: 'Fields to include (partial response)' }),
     ],
-    outputs: [
-      output.object('result', 'Bitbucket API response'),
-      output.array('values', 'List values (for paginated responses)'),
-      output.object('page', 'Pagination info'),
-      output.object('error', 'Error details if operation failed'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     credentials: ['api_key', 'oauth2'],
   },
   async (nodeInput, context) => {

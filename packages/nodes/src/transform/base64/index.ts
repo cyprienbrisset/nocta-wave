@@ -91,15 +91,7 @@ export const base64Node: NodeDefinition = createNode(
         default: false,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.string('encoded', 'Encoded Base64 string'),
-      output.string('decoded', 'Decoded text'),
-      output.string('dataUri', 'Data URI string'),
-      output.number('originalSize', 'Original size in bytes'),
-      output.number('encodedSize', 'Encoded size in bytes'),
-      output.string('filePath', 'Output file path'),
-    ],
+    outputs: [output.main({ description: 'Transformation result' })],
     defaults: {
       operation: 'encode',
       encoding: 'utf-8',

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { User, Lock, AlertTriangle, Save, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { User, Lock, AlertTriangle, Save, Loader2, Keyboard, Palette, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,8 +20,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { ThemeSelector } from '@/components/settings/theme-selector';
 
 export default function SettingsPage() {
+  const router = useRouter();
   const { user } = useAuthStore();
   const [isUpdating, setIsUpdating] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -173,6 +176,55 @@ export default function SettingsPage() {
                   'Changer le mot de passe'
                 )}
               </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Preferences Card */}
+        <Card className="rounded-2xl border-gray-700 bg-[#1a1a2e] shadow-md">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-purple-900/50 p-2.5">
+                <Palette className="h-5 w-5 text-purple-400" />
+              </div>
+              <div>
+                <CardTitle className="text-white">Préférences</CardTitle>
+                <CardDescription className="text-gray-500">
+                  Personnalisez votre expérience
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Theme Selection */}
+            <div className="flex items-center justify-between rounded-xl border border-gray-700 bg-gray-800/30 p-4">
+              <div className="flex items-center gap-3">
+                <Palette className="h-5 w-5 text-gray-400" />
+                <div>
+                  <p className="font-medium text-white">Thème</p>
+                  <p className="text-sm text-gray-500">
+                    Choisissez le mode d'affichage
+                  </p>
+                </div>
+              </div>
+              <ThemeSelector />
+            </div>
+
+            {/* Keyboard Shortcuts */}
+            <div
+              className="flex items-center justify-between rounded-xl border border-gray-700 bg-gray-800/30 p-4 cursor-pointer hover:bg-gray-800/50 transition-colors"
+              onClick={() => router.push('/settings/shortcuts')}
+            >
+              <div className="flex items-center gap-3">
+                <Keyboard className="h-5 w-5 text-gray-400" />
+                <div>
+                  <p className="font-medium text-white">Raccourcis clavier</p>
+                  <p className="text-sm text-gray-500">
+                    Personnalisez les raccourcis de l'application
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-gray-500" />
             </div>
           </CardContent>
         </Card>

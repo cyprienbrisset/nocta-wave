@@ -1,15 +1,21 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Enable cookie parsing for HTTP-only JWT cookies
+  app.use(cookieParser());
+
   // Enable CORS - allow all origins for local network access
+  // In development, allow all origins to support IP-based access
   const corsOrigin = process.env.CORS_ORIGIN;
+  const isDev = process.env.NODE_ENV !== 'production';
   app.enableCors({
-    origin: corsOrigin === '*' ? true : (corsOrigin || 'http://localhost:4000'),
+    origin: isDev ? true : (corsOrigin === '*' ? true : (corsOrigin ? corsOrigin.split(',').map(o => o.trim()) : true)),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],

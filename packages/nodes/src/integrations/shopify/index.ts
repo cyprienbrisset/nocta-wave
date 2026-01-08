@@ -178,13 +178,7 @@ export const shopifyNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('items', 'List results'),
-      output.object('item', 'Single item'),
-      output.number('id', 'Created/updated item ID'),
-      output.number('count', 'Total count'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'products',
       operation: 'list',

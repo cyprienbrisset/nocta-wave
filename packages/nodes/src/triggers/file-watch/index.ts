@@ -68,15 +68,7 @@ export const fileWatchTrigger: NodeDefinition = createNode(
         credentialTypes: ['AWS', 'BASIC_AUTH', 'API_KEY'],
       }),
     ],
-    outputs: [
-      output.string('event', 'Event type (create/modify/delete/move)'),
-      output.string('path', 'File path'),
-      output.string('filename', 'File name'),
-      output.number('size', 'File size in bytes'),
-      output.string('mimeType', 'MIME type'),
-      output.string('modifiedAt', 'Last modified timestamp'),
-      output.object('metadata', 'File metadata'),
-    ],
+    outputs: [output.main({ description: 'Trigger event data' })],
     defaults: {
       storageType: 'local',
       path: '',

@@ -186,14 +186,7 @@ export const zendeskNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('items', 'List results'),
-      output.object('item', 'Single item'),
-      output.number('id', 'Created/updated item ID'),
-      output.number('count', 'Total count'),
-      output.string('nextPage', 'Next page URL'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'tickets',
       operation: 'list',

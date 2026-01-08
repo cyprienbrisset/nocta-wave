@@ -94,14 +94,7 @@ export const anthropicNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.string('content', 'Generated content'),
-      output.string('model', 'Model used'),
-      output.number('inputTokens', 'Input token count'),
-      output.number('outputTokens', 'Output token count'),
-      output.string('stopReason', 'Stop reason'),
-      output.string('id', 'Message ID'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'chat',
       model: 'claude-3-5-sonnet-20241022',

@@ -29,7 +29,7 @@ export const mysqlNode: NodeDefinition = createNode(
       input.json('data', 'Data', { description: 'Data to insert or update' }),
       input.json('where', 'Where Clause', { description: 'Where clause' }),
     ],
-    outputs: [output.array('rows', 'Query results'), output.number('affectedRows', 'Affected rows')],
+    outputs: [output.main({ description: 'MySQL query result' })],
     credentials: ['custom'],
   },
   async (nodeInput, context) => {

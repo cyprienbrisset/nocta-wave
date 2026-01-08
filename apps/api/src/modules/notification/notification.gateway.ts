@@ -20,9 +20,10 @@ interface AuthenticatedSocket extends Socket {
 @WebSocketGateway({
   namespace: '/notifications',
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:4000',
-    credentials: true,
+    origin: '*', // Allow all origins for local network access
+    
   },
+  transports: ['polling', 'websocket'],
 })
 export class NotificationGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()

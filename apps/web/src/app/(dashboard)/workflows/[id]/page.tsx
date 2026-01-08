@@ -197,16 +197,9 @@ function WorkflowEditorContent() {
 
     const connectToCollaboration = async () => {
       try {
-        // Get JWT token from localStorage (where it's stored by the auth system)
-        const token = localStorage.getItem('accessToken');
-
-        if (!token) {
-          console.warn('[Collaboration] No auth token found in localStorage');
-          return;
-        }
-
-        console.log('[Collaboration] Connecting with token...');
-        await collaborationSocket.connect(token);
+        // Token is sent via HTTP-only cookie
+        console.log('[Collaboration] Connecting...');
+        await collaborationSocket.connect();
         console.log('[Collaboration] Connected successfully');
 
         setIsCollaborationConnected(true);
@@ -257,9 +250,19 @@ function WorkflowEditorContent() {
     });
 
     const unsubCursor = collaborationSocket.onCursorUpdated(({ userId, position }) => {
-      setCollaborators((prev) =>
-        prev.map((c) => (c.id === userId ? { ...c, cursor: position } : c))
-      );
+      setCollaborators((prev) => {
+        const exists = prev.find((c) => c.id === userId);
+        if (exists) {
+          return prev.map((c) => (c.id === userId ? { ...c, cursor: position } : c));
+        }
+        // Add unknown collaborator with cursor (may have missed user:joined event)
+        return [...prev, {
+          id: userId,
+          name: userId.startsWith('guest:') ? 'Guest' : 'User',
+          color: '#6366f1',
+          cursor: position,
+        }];
+      });
     });
 
     // Listen for graph updates from other users

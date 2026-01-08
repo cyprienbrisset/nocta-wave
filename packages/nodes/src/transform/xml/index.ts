@@ -96,14 +96,7 @@ export const xmlNode: NodeDefinition = createNode(
         default: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.object('json', 'Parsed JSON data'),
-      output.string('xml', 'Generated XML string'),
-      output.array('queryResults', 'XPath query results'),
-      output.boolean('valid', 'Validation result'),
-      output.array('errors', 'Validation errors'),
-    ],
+    outputs: [output.main({ description: 'Transformation result' })],
     defaults: {
       operation: 'parse',
       rootElement: 'root',

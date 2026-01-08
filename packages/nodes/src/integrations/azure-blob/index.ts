@@ -95,13 +95,7 @@ export const azureBlobNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.string('url', 'Blob URL'),
-      output.object('content', 'Downloaded content'),
-      output.array('blobs', 'List of blobs'),
-      output.object('properties', 'Blob properties'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'upload',
       containerName: '',

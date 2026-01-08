@@ -14,9 +14,11 @@ import { RedisService } from '../../database/redis.service';
 @WebSocketGateway({
   namespace: '/monitoring',
   cors: {
-    origin: '*',
+    origin: true, // Allow all origins dynamically
     methods: ['GET', 'POST'],
+    credentials: true, // Allow cookies
   },
+  transports: ['polling', 'websocket'],
 })
 export class MonitoringGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect

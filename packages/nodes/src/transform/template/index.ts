@@ -89,12 +89,7 @@ export const templateNode: NodeDefinition = createNode(
         placeholder: '/templates/partials',
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Render success'),
-      output.string('rendered', 'Rendered output'),
-      output.string('html', 'HTML output'),
-      output.number('renderTime', 'Render time in ms'),
-    ],
+    outputs: [output.main({ description: 'Transformation result' })],
     defaults: {
       engine: 'handlebars',
       outputFormat: 'string',

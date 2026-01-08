@@ -40,7 +40,7 @@ export const httpResponse: NodeDefinition = createNode(
         { default: 'json' }
       ),
     ],
-    outputs: [output.object('response', 'Response configuration')],
+    outputs: [output.main({ description: 'Operation result' })],
     defaults: {
       statusCode: 200,
       respondWith: 'json',

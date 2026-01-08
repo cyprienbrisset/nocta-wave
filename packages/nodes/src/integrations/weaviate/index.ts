@@ -112,13 +112,7 @@ export const weaviateNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('results', 'Query results'),
-      output.string('id', 'Created/updated object ID'),
-      output.number('count', 'Number of affected objects'),
-      output.object('schema', 'Schema information'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'query',
       className: '',

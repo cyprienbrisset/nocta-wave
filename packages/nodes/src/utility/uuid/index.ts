@@ -91,15 +91,7 @@ export const uuidNode: NodeDefinition = createNode(
         { default: 'standard' }
       ),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.string('uuid', 'Generated UUID'),
-      output.array('uuids', 'Generated UUIDs'),
-      output.boolean('valid', 'Validation result'),
-      output.object('parsed', 'Parsed UUID components'),
-      output.string('formatted', 'Formatted UUID'),
-      output.number('version', 'Detected version'),
-    ],
+    outputs: [output.main({ description: 'Utility operation result' })],
     defaults: {
       operation: 'generate',
       version: 'v4',

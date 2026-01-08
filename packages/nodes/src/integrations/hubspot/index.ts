@@ -99,14 +99,7 @@ export const hubspotNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('results', 'List/search results'),
-      output.object('record', 'Single record'),
-      output.string('id', 'Created/updated object ID'),
-      output.string('nextPage', 'Next page cursor'),
-      output.number('total', 'Total results'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'contacts',
       operation: 'list',

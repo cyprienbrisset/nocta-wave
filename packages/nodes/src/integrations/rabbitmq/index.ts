@@ -77,13 +77,7 @@ export const rabbitmqNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.string('messageId', 'Message ID'),
-      output.object('message', 'Message content (for consume)'),
-      output.object('properties', 'Message properties'),
-      output.number('messageCount', 'Queue message count'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'publish',
       queue: '',

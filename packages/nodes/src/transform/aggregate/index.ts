@@ -42,7 +42,7 @@ export const aggregateNode: NodeDefinition = createNode(
         description: 'Key to store the result',
       }),
     ],
-    outputs: [output.object('result', 'Aggregated result')],
+    outputs: [output.main({ description: 'Operation result' })],
     defaults: {
       operation: 'collect',
       outputKey: 'result',

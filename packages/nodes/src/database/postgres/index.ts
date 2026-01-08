@@ -56,10 +56,7 @@ export const postgresNode: NodeDefinition = createNode(
         description: 'Return the affected rows',
       }),
     ],
-    outputs: [
-      output.array('rows', 'Query result rows'),
-      output.number('rowCount', 'Number of affected rows'),
-    ],
+    outputs: [output.main({ description: 'Database operation result' })],
     credentials: ['custom'],
     defaults: {
       operation: 'query',

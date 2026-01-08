@@ -186,13 +186,7 @@ export const xeroNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.object('entity', 'Single entity'),
-      output.array('entities', 'List results'),
-      output.string('id', 'Entity ID'),
-      output.string('pdfUrl', 'PDF URL'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'invoices',
       operation: 'list',

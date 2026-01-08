@@ -181,14 +181,7 @@ export const magentoNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('items', 'List results'),
-      output.object('item', 'Single item'),
-      output.string('sku', 'Product SKU'),
-      output.number('id', 'Entity ID'),
-      output.number('totalCount', 'Total count'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'products',
       operation: 'list',

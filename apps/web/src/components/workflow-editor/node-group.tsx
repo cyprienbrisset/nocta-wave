@@ -42,7 +42,9 @@ const GROUP_COLORS = [
   '#14b8a6', // Teal
   '#06b6d4', // Cyan
   '#3b82f6', // Blue
-];
+] as const;
+
+const DEFAULT_GROUP_COLOR = GROUP_COLORS[0];
 
 interface NodeGroupProps {
   group: NodeGroupType;
@@ -442,7 +444,7 @@ export function CreateGroupDialog({
   selectedCount,
 }: CreateGroupDialogProps) {
   const [label, setLabel] = useState('New Group');
-  const [color, setColor] = useState(GROUP_COLORS[0]);
+  const [color, setColor] = useState<string>(DEFAULT_GROUP_COLOR);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -456,7 +458,7 @@ export function CreateGroupDialog({
     if (label.trim()) {
       onCreate(label.trim(), color);
       setLabel('New Group');
-      setColor(GROUP_COLORS[0]);
+      setColor(DEFAULT_GROUP_COLOR);
       onClose();
     }
   };

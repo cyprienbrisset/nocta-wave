@@ -1,20 +1,12 @@
-import { useEffect, useCallback, useRef, useState } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useCollaborationStore, type CollaboratorState } from '@/stores/collaboration.store';
 import { useAuthStore } from '@/stores/auth.store';
-import { api } from '@/lib/api/client';
 import type { CursorPosition, ViewportState } from '@ws-flows/shared';
 
 interface UseCollaborationOptions {
   workflowId: string;
   enabled?: boolean;
   onViewportSync?: (viewport: ViewportState, leaderId: string) => void;
-}
-
-/**
- * Get auth token from localStorage
- */
-function getAuthToken(): string | null {
-  return api.getToken();
 }
 
 /**
@@ -26,14 +18,6 @@ export function useCollaboration({
   onViewportSync,
 }: UseCollaborationOptions) {
   const { isAuthenticated } = useAuthStore();
-  const [token, setToken] = useState<string | null>(null);
-
-  // Get token on client side
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setToken(getAuthToken());
-    }
-  }, [isAuthenticated]);
   const {
     isConnected,
     isConnecting,
@@ -56,6 +40,10 @@ export function useCollaboration({
   // Track if we've joined this workflow
   const joinedWorkflowRef = useRef<string | null>(null);
 
+  // Track connection attempts to avoid infinite loops
+  const hasAttemptedRef = useRef(false);
+  const initializingRef = useRef(false);
+
   // Throttled cursor update
   const lastCursorUpdate = useRef<number>(0);
   const CURSOR_THROTTLE = 50; // 20 updates per second max
@@ -64,18 +52,30 @@ export function useCollaboration({
   const viewportTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const VIEWPORT_DEBOUNCE = 100;
 
+  // Reset attempt tracking when workflowId changes
+  useEffect(() => {
+    hasAttemptedRef.current = false;
+  }, [workflowId]);
+
   // Connect and join workflow on mount
   useEffect(() => {
-    if (!enabled || !token || !workflowId) return;
+    if (!enabled || !isAuthenticated || !workflowId) return;
+
+    // Prevent re-running if already initializing or has error
+    if (initializingRef.current) return;
+    if (connectionError && hasAttemptedRef.current) return;
 
     const initialize = async () => {
+      initializingRef.current = true;
+
       try {
-        // Connect if not already connected
+        // Connect if not already connected (token is sent via HTTP-only cookie)
         if (!isConnected && !isConnecting) {
-          await connect(token);
+          hasAttemptedRef.current = true;
+          await connect();
         }
 
-        // Join workflow if not already in it
+        // Join workflow if connected and not already in it
         if (isConnected && joinedWorkflowRef.current !== workflowId) {
           // Leave previous workflow if any
           if (joinedWorkflowRef.current) {
@@ -87,6 +87,8 @@ export function useCollaboration({
         }
       } catch (error) {
         console.error('[Collaboration] Failed to initialize:', error);
+      } finally {
+        initializingRef.current = false;
       }
     };
 
@@ -99,7 +101,7 @@ export function useCollaboration({
         joinedWorkflowRef.current = null;
       }
     };
-  }, [enabled, token, workflowId, isConnected, isConnecting, connect, joinWorkflow, leaveWorkflow]);
+  }, [enabled, isAuthenticated, workflowId, isConnected, isConnecting, connectionError, connect, joinWorkflow, leaveWorkflow]);
 
   // Listen for viewport sync events
   useEffect(() => {

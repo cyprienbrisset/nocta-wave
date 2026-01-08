@@ -90,8 +90,6 @@ export function TargetSchemaTree({
             </div>
           ) : (
             <div className="space-y-0.5">
-              {/* Root config wrapper */}
-              <div className="text-xs text-gray-500 px-2 py-1 font-mono">config</div>
               {inputFields.map((field) => (
                 <FieldNode
                   key={field.path}

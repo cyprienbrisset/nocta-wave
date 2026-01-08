@@ -81,15 +81,7 @@ export const dropboxNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.string('path', 'File path'),
-      output.string('id', 'File/folder ID'),
-      output.object('content', 'Downloaded content'),
-      output.array('entries', 'List of files/folders'),
-      output.object('metadata', 'File/folder metadata'),
-      output.string('sharedLink', 'Shared link URL'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'upload',
       path: '',

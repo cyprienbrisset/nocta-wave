@@ -165,12 +165,7 @@ export const mixpanelNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.object('response', 'API response'),
-      output.array('data', 'Query results'),
-      output.number('count', 'Result count'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'events',
       operation: 'track',

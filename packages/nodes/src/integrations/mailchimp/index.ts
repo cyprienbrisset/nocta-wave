@@ -163,13 +163,7 @@ export const mailchimpNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('items', 'List results'),
-      output.object('item', 'Single item'),
-      output.string('id', 'Item ID'),
-      output.number('totalItems', 'Total items count'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'members',
       operation: 'list',

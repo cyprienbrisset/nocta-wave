@@ -34,7 +34,7 @@ export const airtableNode: NodeDefinition = createNode(
       input.string('filterByFormula', 'Filter Formula', { description: 'Airtable filter formula' }),
       input.number('maxRecords', 'Max Records', { default: 100 }),
     ],
-    outputs: [output.array('records', 'Airtable records'), output.object('record', 'Single record')],
+    outputs: [output.main({ description: 'Airtable operation result' })],
     credentials: ['api_key'],
   },
   async (nodeInput, context) => {

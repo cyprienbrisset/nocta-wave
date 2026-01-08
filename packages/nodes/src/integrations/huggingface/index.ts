@@ -69,15 +69,7 @@ export const huggingfaceNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.unknown('result', 'Inference result'),
-      output.string('generatedText', 'Generated text (for text generation)'),
-      output.array('classifications', 'Classification results'),
-      output.array('entities', 'Named entities (for NER)'),
-      output.string('answer', 'Answer (for QA)'),
-      output.string('summary', 'Summary text'),
-      output.array('embeddings', 'Feature embeddings'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'textGeneration',
       model: '',

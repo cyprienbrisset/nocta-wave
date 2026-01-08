@@ -171,12 +171,7 @@ export const whatsappNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.string('messageId', 'Sent message ID'),
-      output.object('response', 'API response'),
-      output.string('mediaUrl', 'Media download URL'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'sendText',
       templateLanguage: 'en',

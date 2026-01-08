@@ -153,13 +153,7 @@ export const dockerNode: NodeDefinition = createNode(
         required: false,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('items', 'List results'),
-      output.object('item', 'Single item'),
-      output.string('id', 'Container/Image ID'),
-      output.string('logs', 'Container logs'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'containers',
       operation: 'list',

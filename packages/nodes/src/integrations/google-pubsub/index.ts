@@ -87,13 +87,7 @@ export const googlePubSubNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.string('messageId', 'Published message ID'),
-      output.array('messages', 'Pulled messages'),
-      output.array('topics', 'Topic list'),
-      output.array('subscriptions', 'Subscription list'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       operation: 'publish',
       projectId: '',

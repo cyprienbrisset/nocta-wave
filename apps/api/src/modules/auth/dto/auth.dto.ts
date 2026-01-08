@@ -41,9 +41,10 @@ export class LoginDto {
 }
 
 export class RefreshTokenDto {
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Refresh token (optional if sent via HTTP-only cookie)' })
   @IsString()
-  refreshToken: string;
+  @IsOptional()
+  refreshToken?: string;
 }
 
 export class ChangePasswordDto {

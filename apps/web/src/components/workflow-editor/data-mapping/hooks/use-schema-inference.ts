@@ -110,47 +110,109 @@ export function useSchemaInference() {
 
         // Object output - create schema for each top-level key
         return Object.entries(output).map(([key, value]) =>
-          inferSchemaFromValue(value, `output.${key}`, key, 0)
+          inferSchemaFromValue(value, key, key, 0)
         );
       }
 
-      // Fallback to node definition outputs
+      // Generate schema based on node type (common output patterns)
+      const nodeType = node?.data?.nodeType || '';
+      const category = nodeType.split('.')[0] || '';
+
+      // Define common output schemas by node type/category
+      const outputSchemas: Record<string, FieldSchema[]> = {
+        'http.request': [
+          { path: 'body', name: 'body', type: 'object', isArray: false, description: 'Response body' },
+          { path: 'statusCode', name: 'statusCode', type: 'number', isArray: false, description: 'HTTP status code' },
+          { path: 'headers', name: 'headers', type: 'object', isArray: false, description: 'Response headers' },
+        ],
+        'database.postgres': [
+          { path: 'rows', name: 'rows', type: 'array', isArray: true, description: 'Query results' },
+          { path: 'rowCount', name: 'rowCount', type: 'number', isArray: false, description: 'Number of rows' },
+        ],
+        'database.mysql': [
+          { path: 'rows', name: 'rows', type: 'array', isArray: true, description: 'Query results' },
+          { path: 'affectedRows', name: 'affectedRows', type: 'number', isArray: false, description: 'Affected rows' },
+        ],
+        'transform.filter': [
+          { path: 'items', name: 'items', type: 'array', isArray: true, description: 'Filtered items' },
+          { path: 'rejected', name: 'rejected', type: 'array', isArray: true, description: 'Rejected items' },
+          { path: 'count', name: 'count', type: 'number', isArray: false, description: 'Count of filtered items' },
+        ],
+        'transform.map': [
+          { path: 'items', name: 'items', type: 'array', isArray: true, description: 'Mapped items' },
+        ],
+        'transform.set': [
+          { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Modified data' },
+        ],
+        'logic.condition': [
+          { path: 'result', name: 'result', type: 'boolean', isArray: false, description: 'Condition result' },
+          { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Original data' },
+        ],
+      };
+
+      // Check for specific node type schema
+      if (outputSchemas[nodeType]) {
+        return outputSchemas[nodeType];
+      }
+
+      // Category-based defaults
+      const categoryDefaults: Record<string, FieldSchema[]> = {
+        'database': [
+          { path: 'rows', name: 'rows', type: 'array', isArray: true, description: 'Query results' },
+          { path: 'success', name: 'success', type: 'boolean', isArray: false, description: 'Operation success' },
+        ],
+        'http': [
+          { path: 'body', name: 'body', type: 'object', isArray: false, description: 'Response body' },
+          { path: 'statusCode', name: 'statusCode', type: 'number', isArray: false, description: 'Status code' },
+        ],
+        'transform': [
+          { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Transformed data' },
+        ],
+        'integration': [
+          { path: 'result', name: 'result', type: 'object', isArray: false, description: 'API response' },
+          { path: 'success', name: 'success', type: 'boolean', isArray: false, description: 'Operation success' },
+        ],
+        'trigger': [
+          { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Trigger payload' },
+          { path: 'timestamp', name: 'timestamp', type: 'date', isArray: false, description: 'Trigger time' },
+        ],
+      };
+
+      if (categoryDefaults[category]) {
+        return categoryDefaults[category];
+      }
+
+      // Fallback to node definition outputs - but expand 'main' output
       if (node?.data?.outputs && Array.isArray(node.data.outputs)) {
-        return node.data.outputs.map((output: { name: string; type?: string; description?: string }) => ({
-          path: `output.${output.name}`,
+        const outputs = node.data.outputs;
+        // If only 'main' output, provide a generic data structure
+        if (outputs.length === 1 && outputs[0].name === 'main') {
+          return [
+            { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Output data' },
+            { path: 'success', name: 'success', type: 'boolean', isArray: false, description: 'Operation success' },
+          ];
+        }
+        return outputs.map((output: { name: string; type?: string; description?: string }) => ({
+          path: output.name,
           name: output.name,
-          type: (output.type as DataType) || 'unknown',
+          type: (output.type as DataType) || 'object',
           isArray: output.type === 'array',
           description: output.description,
           sampleValue: undefined,
         }));
       }
 
-      // Fallback to config values as a hint for expected structure
-      if (node?.data?.config) {
-        const configEntries = Object.entries(node.data.config)
-          .filter(([key]) => key.startsWith('output') || key === 'result');
-        if (configEntries.length > 0) {
-          return configEntries.map(([key, value]) =>
-            inferSchemaFromValue(value, `output.${key}`, key, 0)
-          );
-        }
-      }
-
-      // Default: single output field
-      return [{
-        path: 'output',
-        name: 'output',
-        type: 'object',
-        isArray: false,
-        description: 'Node output (execute workflow to see actual data)',
-      }];
+      // Default: generic data object
+      return [
+        { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Output data' },
+        { path: 'success', name: 'success', type: 'boolean', isArray: false, description: 'Operation success' },
+      ];
     },
     [debug.nodeData, nodes, inferSchemaFromValue]
   );
 
   /**
-   * Infer schema for a node's input (from config definition)
+   * Infer schema for a node's input (what the node expects to receive)
    */
   const inferNodeInputSchema = useCallback(
     (nodeId: string): FieldSchema[] => {
@@ -162,30 +224,79 @@ export function useSchemaInference() {
         const input = nodeData.input;
         if (typeof input === 'object' && input !== null) {
           return Object.entries(input).map(([key, value]) =>
-            inferSchemaFromValue(value, `config.${key}`, key, 0)
+            inferSchemaFromValue(value, key, key, 0)
           );
         }
       }
 
-      // Fallback to config definition
-      if (node?.data?.config) {
-        const config = node.data.config;
-        const entries = Object.entries(config);
-        if (entries.length > 0) {
-          return entries.map(([key, value]) =>
-            inferSchemaFromValue(value, `config.${key}`, key, 0)
-          );
-        }
+      // Generate input schema based on node type
+      const nodeType = node?.data?.nodeType || '';
+
+      // Define expected inputs by node type
+      const inputSchemas: Record<string, FieldSchema[]> = {
+        'transform.filter': [
+          { path: 'items', name: 'items', type: 'array', isArray: true, description: 'Array of items to filter' },
+          { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Input data object' },
+        ],
+        'transform.map': [
+          { path: 'items', name: 'items', type: 'array', isArray: true, description: 'Array of items to transform' },
+          { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Input data object' },
+        ],
+        'transform.set': [
+          { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Input data to modify' },
+        ],
+        'logic.condition': [
+          { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Data to evaluate' },
+        ],
+        'logic.switch': [
+          { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Data to route' },
+        ],
+        'http.request': [
+          { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Request data' },
+          { path: 'body', name: 'body', type: 'object', isArray: false, description: 'Request body (for POST/PUT)' },
+        ],
+        'transform.aggregate': [
+          { path: 'items', name: 'items', type: 'array', isArray: true, description: 'Items to aggregate' },
+        ],
+        'transform.merge': [
+          { path: 'source', name: 'source', type: 'object', isArray: false, description: 'Source object' },
+          { path: 'target', name: 'target', type: 'object', isArray: false, description: 'Target object' },
+        ],
+      };
+
+      if (inputSchemas[nodeType]) {
+        return inputSchemas[nodeType];
       }
 
-      // Default: config object
-      return [{
-        path: 'config',
-        name: 'config',
-        type: 'object',
-        isArray: false,
-        description: 'Node configuration',
-      }];
+      // Category-based defaults for inputs
+      const category = nodeType.split('.')[0] || '';
+      const categoryInputs: Record<string, FieldSchema[]> = {
+        'database': [
+          { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Data for query parameters' },
+        ],
+        'integration': [
+          { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Data to send to service' },
+        ],
+        'transform': [
+          { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Data to transform' },
+          { path: 'items', name: 'items', type: 'array', isArray: true, description: 'Array items (if applicable)' },
+        ],
+        'logic': [
+          { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Data to process' },
+        ],
+        'utility': [
+          { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Input data' },
+        ],
+      };
+
+      if (categoryInputs[category]) {
+        return categoryInputs[category];
+      }
+
+      // Default: data input
+      return [
+        { path: 'data', name: 'data', type: 'object', isArray: false, description: 'Input data from previous node' },
+      ];
     },
     [nodes, debug.nodeData, inferSchemaFromValue]
   );

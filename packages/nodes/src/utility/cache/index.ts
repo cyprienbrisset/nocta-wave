@@ -131,16 +131,7 @@ export const cacheNode: NodeDefinition = createNode(
         { default: 'lru' }
       ),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.boolean('hit', 'Cache hit'),
-      output.object('value', 'Retrieved value'),
-      output.array('values', 'Multiple values'),
-      output.boolean('exists', 'Key exists'),
-      output.array('keys', 'Matched keys'),
-      output.number('ttl', 'Remaining TTL'),
-      output.object('stats', 'Cache statistics'),
-    ],
+    outputs: [output.main({ description: 'Utility operation result' })],
     defaults: {
       operation: 'get',
       backend: 'memory',

@@ -34,7 +34,7 @@ export const notionNode: NodeDefinition = createNode(
       input.json('filter', 'Filter', { description: 'Database query filter' }),
       input.json('sorts', 'Sorts', { description: 'Sort configuration' }),
     ],
-    outputs: [output.object('result', 'Notion API response'), output.array('results', 'Query results')],
+    outputs: [output.main({ description: 'Notion API response with results' })],
     credentials: ['api_key'],
   },
   async (nodeInput, context) => {

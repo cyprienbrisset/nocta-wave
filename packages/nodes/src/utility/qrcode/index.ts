@@ -188,14 +188,7 @@ export const qrcodeNode: NodeDefinition = createNode(
         description: 'Path to QR code image',
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.string('path', 'Output file path'),
-      output.string('base64', 'QR code as base64'),
-      output.string('svg', 'QR code as SVG'),
-      output.string('content', 'Decoded content'),
-      output.string('type', 'Content type detected'),
-    ],
+    outputs: [output.main({ description: 'Utility operation result' })],
     defaults: {
       operation: 'generate',
       type: 'text',

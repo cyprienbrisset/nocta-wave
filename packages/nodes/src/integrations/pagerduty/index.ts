@@ -179,13 +179,7 @@ export const pagerdutyNode: NodeDefinition = createNode(
         required: true,
       }),
     ],
-    outputs: [
-      output.boolean('success', 'Operation success'),
-      output.array('incidents', 'Incident list'),
-      output.object('incident', 'Incident details'),
-      output.string('dedupKey', 'Deduplication key'),
-      output.string('status', 'Event status'),
-    ],
+    outputs: [output.main({ description: 'API operation result' })],
     defaults: {
       resource: 'incidents',
       operation: 'list',
